@@ -12,12 +12,20 @@
  *   - FlightInputHandler: 飞行输入控制
  *   - GameEvents: 游戏事件系统
  *
+ * 关键技术点：
+ *   - KSP的GameEvents字段类型为EventDataVoid（继承自EventData<EventVoid>），
+ *     其Add/Remove方法期望EventVoid.OnEvent委托类型，而非System.Action。
+ *     两者签名相同（无参void），但类型不同，需通过Delegate.CreateDelegate转换。
+ *   - AddModApplication的回调参数类型为RUIToggleButton.OnToggle，
+ *     同样需要从System.Action转换。
+ *
  * 依赖：
  *   - Assembly-CSharp.dll (KSP核心，精简版即可，运行时使用完整版)
  *   - UnityEngine.CoreModule.dll (Unity核心)
  */
 
 using System;
+using System.Linq;
 using System.Reflection;
 using UnityEngine;
 
@@ -43,7 +51,6 @@ namespace KSPLaunchCountdown
         {
             if (kspAssembly != null) return kspAssembly;
 
-            // 查找Assembly-CSharp程序集
             foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
             {
                 if (asm.GetName().Name == "Assembly-CSharp")
@@ -59,21 +66,47 @@ namespace KSPLaunchCountdown
 
         /// <summary>
         /// 根据类型名称解析KSP类型
+        /// 依次尝试：全名 → KSP命名空间 → 遍历程序集所有类型
         /// </summary>
-        /// <param name="typeName">类型全名（含命名空间），如 "ApplicationLauncher"</param>
-        /// <returns>解析到的Type，未找到返回null</returns>
         private static Type ResolveType(string typeName)
         {
             var asm = GetKspAssembly();
             if (asm == null) return null;
 
+            // 尝试直接全名
             Type type = asm.GetType(typeName);
-            if (type == null)
+            if (type != null) return type;
+
+            // 尝试KSP命名空间
+            type = asm.GetType("KSP." + typeName);
+            if (type != null) return type;
+
+            // 遍历程序集所有类型，按名称匹配
+            foreach (var t in asm.GetTypes())
             {
-                // 尝试KSP命名空间
-                type = asm.GetType("KSP." + typeName);
+                if (t.Name == typeName)
+                {
+                    return t;
+                }
             }
-            return type;
+
+            return null;
+        }
+
+        /// <summary>
+        /// 将System.Action转换为KSP的委托类型
+        /// KSP使用自定义委托类型（如EventVoid.OnEvent、RUIToggleButton.OnToggle），
+        /// 它们的签名与System.Action相同（无参void），但类型不同。
+        /// 通过Delegate.CreateDelegate创建目标委托类型的实例。
+        /// </summary>
+        /// <param name="action">System.Action回调</param>
+        /// <param name="targetDelegateType">目标委托类型</param>
+        /// <returns>转换后的委托实例</returns>
+        private static Delegate ConvertActionToDelegate(Action action, Type targetDelegateType)
+        {
+            if (action == null) return null;
+            // 从Action的MethodInfo创建目标委托类型的实例
+            return Delegate.CreateDelegate(targetDelegateType, action.Target, action.Method);
         }
 
         #region ApplicationLauncher 相关
@@ -94,15 +127,23 @@ namespace KSPLaunchCountdown
         /// <summary>
         /// 获取ApplicationLauncher单例实例
         /// </summary>
-        /// <returns>ApplicationLauncher实例，失败返回null</returns>
         public static object GetApplicationLauncherInstance()
         {
             var type = GetApplicationLauncherType();
             if (type == null) return null;
 
+            // 先尝试属性
             var instanceProp = type.GetProperty("Instance",
                 BindingFlags.Public | BindingFlags.Static);
-            return instanceProp?.GetValue(null);
+            if (instanceProp != null)
+            {
+                return instanceProp.GetValue(null);
+            }
+
+            // 再尝试字段
+            var instanceField = type.GetField("Instance",
+                BindingFlags.Public | BindingFlags.Static);
+            return instanceField?.GetValue(null);
         }
 
         /// <summary>
@@ -113,24 +154,30 @@ namespace KSPLaunchCountdown
             var type = GetApplicationLauncherType();
             if (type == null) return false;
 
+            // 先尝试属性
             var readyProp = type.GetProperty("Ready",
                 BindingFlags.Public | BindingFlags.Static);
-            if (readyProp == null) return false;
+            if (readyProp != null)
+            {
+                return (bool)readyProp.GetValue(null);
+            }
 
-            return (bool)readyProp.GetValue(null);
+            // 再尝试字段
+            var readyField = type.GetField("Ready",
+                BindingFlags.Public | BindingFlags.Static);
+            if (readyField != null)
+            {
+                return (bool)readyField.GetValue(null);
+            }
+
+            return false;
         }
 
         /// <summary>
         /// 添加模组按钮到ApplicationLauncher
+        /// AddModApplication的回调参数类型为RUIToggleButton.OnToggle，
+        /// 需要从System.Action转换。
         /// </summary>
-        /// <param name="onToggle">激活回调</param>
-        /// <param name="onUntoggle">取消激活回调</param>
-        /// <param name="onHover">悬停回调</param>
-        /// <param name="onHoverOut">悬停移出回调</param>
-        /// <param name="onEnable">启用回调</param>
-        /// <param name="onDisable">禁用回调</param>
-        /// <param name="visibleInScenes">显示场景（AppScenes枚举值）</param>
-        /// <param name="texture">按钮图标纹理</param>
         /// <returns>按钮对象（ApplicationLauncherButton实例），失败返回null</returns>
         public static object AddModApplication(
             Action onToggle, Action onUntoggle,
@@ -139,9 +186,15 @@ namespace KSPLaunchCountdown
             int visibleInScenes, Texture2D texture)
         {
             var instance = GetApplicationLauncherInstance();
-            if (instance == null) return null;
+            if (instance == null)
+            {
+                Debug.LogWarning($"{LOG_TAG} ApplicationLauncher实例不存在");
+                return null;
+            }
 
             var type = GetApplicationLauncherType();
+
+            // 查找AddModApplication方法
             var method = type.GetMethod("AddModApplication", BindingFlags.Public | BindingFlags.Instance);
             if (method == null)
             {
@@ -149,12 +202,23 @@ namespace KSPLaunchCountdown
                 return null;
             }
 
+            // 获取回调参数的委托类型（RUIToggleButton.OnToggle）
+            var parameters = method.GetParameters();
+            Type callbackDelegateType = parameters[0].ParameterType;
+
+            // 将Action转换为KSP的委托类型
+            Delegate onToggleDel = ConvertActionToDelegate(onToggle, callbackDelegateType);
+            Delegate onUntoggleDel = ConvertActionToDelegate(onUntoggle, callbackDelegateType);
+            Delegate onHoverDel = ConvertActionToDelegate(onHover, callbackDelegateType);
+            Delegate onHoverOutDel = ConvertActionToDelegate(onHoverOut, callbackDelegateType);
+            Delegate onEnableDel = ConvertActionToDelegate(onEnable, callbackDelegateType);
+            Delegate onDisableDel = ConvertActionToDelegate(onDisable, callbackDelegateType);
+
             // 获取AppScenes枚举类型
-            Type appScenesType = ResolveType("ApplicationLauncher+AppScenes");
+            Type appScenesType = type.GetNestedType("AppScenes");
             if (appScenesType == null)
             {
-                // 尝试嵌套类型
-                appScenesType = GetApplicationLauncherType().GetNestedType("AppScenes");
+                appScenesType = ResolveType("ApplicationLauncher+AppScenes");
             }
 
             object scenesValue = appScenesType != null
@@ -165,14 +229,15 @@ namespace KSPLaunchCountdown
             {
                 var result = method.Invoke(instance, new object[]
                 {
-                    onToggle, onUntoggle, onHover, onHoverOut,
-                    onEnable, onDisable, scenesValue, texture
+                    onToggleDel, onUntoggleDel, onHoverDel, onHoverOutDel,
+                    onEnableDel, onDisableDel, scenesValue, texture
                 });
+                Debug.Log($"{LOG_TAG} AddModApplication调用成功");
                 return result;
             }
             catch (Exception ex)
             {
-                Debug.LogError($"{LOG_TAG} AddModApplication调用失败: {ex.Message}");
+                Debug.LogError($"{LOG_TAG} AddModApplication调用失败: {ex.Message}\n{ex.InnerException}");
                 return null;
             }
         }
@@ -180,7 +245,6 @@ namespace KSPLaunchCountdown
         /// <summary>
         /// 移除模组按钮
         /// </summary>
-        /// <param name="button">按钮对象（ApplicationLauncherButton实例）</param>
         public static void RemoveModApplication(object button)
         {
             if (button == null) return;
@@ -223,7 +287,7 @@ namespace KSPLaunchCountdown
                     return (int)values.GetValue(i);
                 }
             }
-            return 4; // 默认值
+            return 4;
         }
 
         #endregion
@@ -231,10 +295,87 @@ namespace KSPLaunchCountdown
         #region GameEvents 相关
 
         /// <summary>
-        /// 注册ApplicationLauncher就绪事件
+        /// 在GameEvents类型中查找指定名称的字段
+        /// 同时尝试字段和属性，支持多种命名风格
         /// </summary>
+        /// <param name="gameEventsType">GameEvents类型</param>
+        /// <param name="fieldName">字段名</param>
+        /// <returns>字段/属性的值（EventData对象），未找到返回null</returns>
+        private static object FindGameEventField(Type gameEventsType, string fieldName)
+        {
+            // 尝试作为字段获取
+            var field = gameEventsType.GetField(fieldName,
+                BindingFlags.Public | BindingFlags.Static);
+            if (field != null)
+            {
+                return field.GetValue(null);
+            }
+
+            // 尝试作为属性获取
+            var prop = gameEventsType.GetProperty(fieldName,
+                BindingFlags.Public | BindingFlags.Static);
+            if (prop != null)
+            {
+                return prop.GetValue(null);
+            }
+
+            // 尝试模糊匹配：遍历所有静态字段，查找名称包含关键字的
+            foreach (var f in gameEventsType.GetFields(BindingFlags.Public | BindingFlags.Static))
+            {
+                if (f.Name.IndexOf(fieldName, StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    fieldName.IndexOf(f.Name, StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    Debug.Log($"{LOG_TAG} 模糊匹配事件字段: {f.Name} (搜索: {fieldName})");
+                    return f.GetValue(null);
+                }
+            }
+
+            // 尝试按类型匹配：查找EventDataVoid类型的字段
+            // EventDataVoid是KSP中无参数事件的类型
+            var eventDataType = ResolveType("EventDataVoid");
+            if (eventDataType != null)
+            {
+                foreach (var f in gameEventsType.GetFields(BindingFlags.Public | BindingFlags.Static))
+                {
+                    if (f.FieldType == eventDataType || f.FieldType.Name == "EventDataVoid")
+                    {
+                        Debug.Log($"{LOG_TAG} 按类型匹配事件字段: {f.Name}");
+                        return f.GetValue(null);
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// 获取EventData的Add/Remove方法所需的委托类型
+        /// KSP的EventData<T>.Add方法期望特定的委托类型（如EventVoid.OnEvent），
+        /// 需要通过反射获取该类型并转换。
+        /// </summary>
+        /// <param name="eventData">EventData对象</param>
+        /// <returns>Add方法第一个参数的委托类型</returns>
+        private static Type GetEventDelegateType(object eventData)
+        {
+            var addMethod = eventData.GetType().GetMethod("Add", BindingFlags.Public | BindingFlags.Instance);
+            if (addMethod != null)
+            {
+                var parameters = addMethod.GetParameters();
+                if (parameters.Length > 0)
+                {
+                    return parameters[0].ParameterType;
+                }
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// 注册GameEvents中的事件
+        /// 自动处理委托类型转换（System.Action → EventVoid.OnEvent）
+        /// </summary>
+        /// <param name="fieldName">事件字段名</param>
         /// <param name="callback">回调方法</param>
-        public static void AddOnLauncherReadyEvent(Action callback)
+        private static void AddGameEvent(string fieldName, Action callback)
         {
             var gameEventsType = ResolveType("GameEvents");
             if (gameEventsType == null)
@@ -243,97 +384,108 @@ namespace KSPLaunchCountdown
                 return;
             }
 
-            var readyEvent = gameEventsType.GetEvent("onGUIApplicationLauncherReady",
-                BindingFlags.Public | BindingFlags.Static);
-            if (readyEvent == null)
+            object eventData = FindGameEventField(gameEventsType, fieldName);
+            if (eventData == null)
             {
-                Debug.LogError($"{LOG_TAG} 未找到onGUIApplicationLauncherReady事件");
+                Debug.LogError($"{LOG_TAG} 未找到事件: {fieldName}");
+                // 调试：列出GameEvents中所有字段名
+                Debug.Log($"{LOG_TAG} GameEvents可用字段:");
+                foreach (var f in gameEventsType.GetFields(BindingFlags.Public | BindingFlags.Static))
+                {
+                    Debug.Log($"  {f.Name} ({f.FieldType.Name})");
+                }
                 return;
             }
 
-            // GameEvents使用EventData<T>，需要通过反射注册
-            var readyField = gameEventsType.GetField("onGUIApplicationLauncherReady",
-                BindingFlags.Public | BindingFlags.Static);
-            if (readyField == null) return;
+            // 获取Add方法期望的委托类型
+            Type delegateType = GetEventDelegateType(eventData);
+            if (delegateType == null)
+            {
+                Debug.LogError($"{LOG_TAG} 无法确定事件 {fieldName} 的委托类型");
+                return;
+            }
 
-            object eventData = readyField.GetValue(null);
-            if (eventData == null) return;
+            // 将Action转换为目标委托类型
+            Delegate convertedCallback = ConvertActionToDelegate(callback, delegateType);
 
-            // EventData<T>.Add(callback)
             var addMethod = eventData.GetType().GetMethod("Add", BindingFlags.Public | BindingFlags.Instance);
             if (addMethod != null)
             {
-                addMethod.Invoke(eventData, new object[] { callback });
+                try
+                {
+                    addMethod.Invoke(eventData, new object[] { convertedCallback });
+                    Debug.Log($"{LOG_TAG} 已注册事件: {fieldName}");
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogError($"{LOG_TAG} 注册事件 {fieldName} 失败: {ex.Message}");
+                }
             }
+        }
+
+        /// <summary>
+        /// 注销GameEvents中的事件
+        /// </summary>
+        /// <param name="fieldName">事件字段名</param>
+        /// <param name="callback">回调方法</param>
+        private static void RemoveGameEvent(string fieldName, Action callback)
+        {
+            var gameEventsType = ResolveType("GameEvents");
+            if (gameEventsType == null) return;
+
+            object eventData = FindGameEventField(gameEventsType, fieldName);
+            if (eventData == null) return;
+
+            // 获取Remove方法期望的委托类型
+            Type delegateType = GetEventDelegateType(eventData);
+            if (delegateType == null) return;
+
+            Delegate convertedCallback = ConvertActionToDelegate(callback, delegateType);
+
+            var removeMethod = eventData.GetType().GetMethod("Remove", BindingFlags.Public | BindingFlags.Instance);
+            if (removeMethod != null)
+            {
+                try
+                {
+                    removeMethod.Invoke(eventData, new object[] { convertedCallback });
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogError($"{LOG_TAG} 注销事件 {fieldName} 失败: {ex.Message}");
+                }
+            }
+        }
+
+        /// <summary>
+        /// 注册ApplicationLauncher就绪事件
+        /// </summary>
+        public static void AddOnLauncherReadyEvent(Action callback)
+        {
+            AddGameEvent("onGUIApplicationLauncherReady", callback);
         }
 
         /// <summary>
         /// 注销ApplicationLauncher就绪事件
         /// </summary>
-        /// <param name="callback">回调方法</param>
         public static void RemoveOnLauncherReadyEvent(Action callback)
         {
-            var gameEventsType = ResolveType("GameEvents");
-            if (gameEventsType == null) return;
-
-            var readyField = gameEventsType.GetField("onGUIApplicationLauncherReady",
-                BindingFlags.Public | BindingFlags.Static);
-            if (readyField == null) return;
-
-            object eventData = readyField.GetValue(null);
-            if (eventData == null) return;
-
-            var removeMethod = eventData.GetType().GetMethod("Remove", BindingFlags.Public | BindingFlags.Instance);
-            if (removeMethod != null)
-            {
-                removeMethod.Invoke(eventData, new object[] { callback });
-            }
+            RemoveGameEvent("onGUIApplicationLauncherReady", callback);
         }
 
         /// <summary>
         /// 注册ApplicationLauncher销毁事件
         /// </summary>
-        /// <param name="callback">回调方法</param>
         public static void AddOnLauncherDestroyedEvent(Action callback)
         {
-            var gameEventsType = ResolveType("GameEvents");
-            if (gameEventsType == null) return;
-
-            var destroyedField = gameEventsType.GetField("onGUIApplicationLauncherDestroyed",
-                BindingFlags.Public | BindingFlags.Static);
-            if (destroyedField == null) return;
-
-            object eventData = destroyedField.GetValue(null);
-            if (eventData == null) return;
-
-            var addMethod = eventData.GetType().GetMethod("Add", BindingFlags.Public | BindingFlags.Instance);
-            if (addMethod != null)
-            {
-                addMethod.Invoke(eventData, new object[] { callback });
-            }
+            AddGameEvent("onGUIApplicationLauncherDestroyed", callback);
         }
 
         /// <summary>
         /// 注销ApplicationLauncher销毁事件
         /// </summary>
-        /// <param name="callback">回调方法</param>
         public static void RemoveOnLauncherDestroyedEvent(Action callback)
         {
-            var gameEventsType = ResolveType("GameEvents");
-            if (gameEventsType == null) return;
-
-            var destroyedField = gameEventsType.GetField("onGUIApplicationLauncherDestroyed",
-                BindingFlags.Public | BindingFlags.Static);
-            if (destroyedField == null) return;
-
-            object eventData = destroyedField.GetValue(null);
-            if (eventData == null) return;
-
-            var removeMethod = eventData.GetType().GetMethod("Remove", BindingFlags.Public | BindingFlags.Instance);
-            if (removeMethod != null)
-            {
-                removeMethod.Invoke(eventData, new object[] { callback });
-            }
+            RemoveGameEvent("onGUIApplicationLauncherDestroyed", callback);
         }
 
         #endregion
@@ -352,25 +504,42 @@ namespace KSPLaunchCountdown
                 return;
             }
 
+            // 尝试静态方法
             var method = stageManagerType.GetMethod("ActivateNextStage",
                 BindingFlags.Public | BindingFlags.Static);
-            if (method == null)
-            {
-                // 尝试实例方法
-                var instanceProp = stageManagerType.GetProperty("Instance",
-                    BindingFlags.Public | BindingFlags.Static);
-                if (instanceProp == null) return;
-
-                object instance = instanceProp.GetValue(null);
-                if (instance == null) return;
-
-                method = stageManagerType.GetMethod("ActivateNextStage",
-                    BindingFlags.Public | BindingFlags.Instance);
-                method?.Invoke(instance, null);
-            }
-            else
+            if (method != null)
             {
                 method.Invoke(null, null);
+                return;
+            }
+
+            // 尝试实例方法
+            var instanceProp = stageManagerType.GetProperty("Instance",
+                BindingFlags.Public | BindingFlags.Static);
+            if (instanceProp != null)
+            {
+                object inst = instanceProp.GetValue(null);
+                if (inst != null)
+                {
+                    method = stageManagerType.GetMethod("ActivateNextStage",
+                        BindingFlags.Public | BindingFlags.Instance);
+                    method?.Invoke(inst, null);
+                    return;
+                }
+            }
+
+            // 尝试字段获取实例
+            var instanceField = stageManagerType.GetField("Instance",
+                BindingFlags.Public | BindingFlags.Static);
+            if (instanceField != null)
+            {
+                object inst = instanceField.GetValue(null);
+                if (inst != null)
+                {
+                    method = stageManagerType.GetMethod("ActivateNextStage",
+                        BindingFlags.Public | BindingFlags.Instance);
+                    method?.Invoke(inst, null);
+                }
             }
         }
 
@@ -386,26 +555,24 @@ namespace KSPLaunchCountdown
             var uiMasterType = ResolveType("UIMasterController");
             if (uiMasterType == null)
             {
-                // 尝试KSP.UI命名空间
-                uiMasterType = ResolveType("KSP.UI.UIMasterController");
-            }
-            if (uiMasterType == null)
-            {
-                Debug.LogWarning($"{LOG_TAG} 未找到UIMasterController类型，尝试GameEvents方式");
                 // 备用方案：通过GameEvents隐藏UI
                 FireGameEvent("onHideUI");
                 return;
             }
 
-            var instanceProp = uiMasterType.GetProperty("Instance",
-                BindingFlags.Public | BindingFlags.Static);
-            if (instanceProp == null) return;
-
-            object instance = instanceProp.GetValue(null);
+            var instance = GetStaticInstance(uiMasterType);
             if (instance == null) return;
 
             var hideMethod = uiMasterType.GetMethod("Hide", BindingFlags.Public | BindingFlags.Instance);
-            hideMethod?.Invoke(instance, null);
+            if (hideMethod != null)
+            {
+                hideMethod.Invoke(instance, null);
+            }
+            else
+            {
+                // 备用方案
+                FireGameEvent("onHideUI");
+            }
         }
 
         /// <summary>
@@ -416,24 +583,22 @@ namespace KSPLaunchCountdown
             var uiMasterType = ResolveType("UIMasterController");
             if (uiMasterType == null)
             {
-                uiMasterType = ResolveType("KSP.UI.UIMasterController");
-            }
-            if (uiMasterType == null)
-            {
-                Debug.LogWarning($"{LOG_TAG} 未找到UIMasterController类型，尝试GameEvents方式");
                 FireGameEvent("onShowUI");
                 return;
             }
 
-            var instanceProp = uiMasterType.GetProperty("Instance",
-                BindingFlags.Public | BindingFlags.Static);
-            if (instanceProp == null) return;
-
-            object instance = instanceProp.GetValue(null);
+            var instance = GetStaticInstance(uiMasterType);
             if (instance == null) return;
 
             var showMethod = uiMasterType.GetMethod("Show", BindingFlags.Public | BindingFlags.Instance);
-            showMethod?.Invoke(instance, null);
+            if (showMethod != null)
+            {
+                showMethod.Invoke(instance, null);
+            }
+            else
+            {
+                FireGameEvent("onShowUI");
+            }
         }
 
         /// <summary>
@@ -444,18 +609,26 @@ namespace KSPLaunchCountdown
             var uiMasterType = ResolveType("UIMasterController");
             if (uiMasterType == null) return false;
 
-            var instanceProp = uiMasterType.GetProperty("Instance",
-                BindingFlags.Public | BindingFlags.Static);
-            if (instanceProp == null) return false;
-
-            object instance = instanceProp.GetValue(null);
+            var instance = GetStaticInstance(uiMasterType);
             if (instance == null) return false;
 
+            // 尝试isHidden属性
             var isHiddenProp = uiMasterType.GetProperty("isHidden",
                 BindingFlags.Public | BindingFlags.Instance);
-            if (isHiddenProp == null) return false;
+            if (isHiddenProp != null)
+            {
+                return (bool)isHiddenProp.GetValue(instance);
+            }
 
-            return (bool)isHiddenProp.GetValue(instance);
+            // 尝试IsHidden属性
+            isHiddenProp = uiMasterType.GetProperty("IsHidden",
+                BindingFlags.Public | BindingFlags.Instance);
+            if (isHiddenProp != null)
+            {
+                return (bool)isHiddenProp.GetValue(instance);
+            }
+
+            return false;
         }
 
         #endregion
@@ -465,29 +638,56 @@ namespace KSPLaunchCountdown
         /// <summary>
         /// 获取HighLogic.UISkin（GUISkin）
         /// </summary>
-        /// <returns>GUISkin实例，失败返回null</returns>
         public static GUISkin GetUISkin()
         {
             var highLogicType = ResolveType("HighLogic");
             if (highLogicType == null) return null;
 
+            // 尝试属性
             var skinProp = highLogicType.GetProperty("UISkin",
                 BindingFlags.Public | BindingFlags.Static);
-            if (skinProp == null) return null;
-
-            var skinObj = skinProp.GetValue(null);
-            if (skinObj is GUISkin guiSkin) return guiSkin;
-
-            // 如果返回的是UISkinDef类型，尝试转换
-            if (skinObj != null)
+            if (skinProp == null)
             {
-                // UISkinDef有skin属性返回GUISkin
-                var skinField = skinObj.GetType().GetProperty("skin",
-                    BindingFlags.Public | BindingFlags.Instance);
+                // 尝试字段
+                var skinField = highLogicType.GetField("UISkin",
+                    BindingFlags.Public | BindingFlags.Static);
                 if (skinField != null)
                 {
-                    return skinField.GetValue(skinObj) as GUISkin;
+                    var skinObj = skinField.GetValue(null);
+                    return TryConvertToGUISkin(skinObj);
                 }
+                return null;
+            }
+
+            var skinObj2 = skinProp.GetValue(null);
+            return TryConvertToGUISkin(skinObj2);
+        }
+
+        /// <summary>
+        /// 尝试将对象转换为GUISkin
+        /// 处理HighLogic.UISkin返回UISkinDef类型的情况
+        /// </summary>
+        private static GUISkin TryConvertToGUISkin(object skinObj)
+        {
+            if (skinObj == null) return null;
+
+            // 直接是GUISkin
+            if (skinObj is GUISkin guiSkin) return guiSkin;
+
+            // UISkinDef类型，有skin属性返回GUISkin
+            var skinProp = skinObj.GetType().GetProperty("skin",
+                BindingFlags.Public | BindingFlags.Instance);
+            if (skinProp != null)
+            {
+                return skinProp.GetValue(skinObj) as GUISkin;
+            }
+
+            // 尝试字段
+            var skinField = skinObj.GetType().GetField("skin",
+                BindingFlags.Public | BindingFlags.Instance);
+            if (skinField != null)
+            {
+                return skinField.GetValue(skinObj) as GUISkin;
             }
 
             return null;
@@ -501,11 +701,23 @@ namespace KSPLaunchCountdown
             var highLogicType = ResolveType("HighLogic");
             if (highLogicType == null) return false;
 
+            // 尝试属性
             var prop = highLogicType.GetProperty("LoadedSceneIsFlight",
                 BindingFlags.Public | BindingFlags.Static);
-            if (prop == null) return false;
+            if (prop != null)
+            {
+                return (bool)prop.GetValue(null);
+            }
 
-            return (bool)prop.GetValue(null);
+            // 尝试字段
+            var field = highLogicType.GetField("LoadedSceneIsFlight",
+                BindingFlags.Public | BindingFlags.Static);
+            if (field != null)
+            {
+                return (bool)field.GetValue(null);
+            }
+
+            return false;
         }
 
         #endregion
@@ -515,24 +727,45 @@ namespace KSPLaunchCountdown
         /// <summary>
         /// 设置油门值
         /// </summary>
-        /// <param name="throttle">油门值（0.0~1.0）</param>
         public static void SetThrottle(float throttle)
         {
             var fihType = ResolveType("FlightInputHandler");
             if (fihType == null) return;
 
+            // 尝试属性获取state
             var stateProp = fihType.GetProperty("state",
                 BindingFlags.Public | BindingFlags.Static);
-            if (stateProp == null) return;
+            object state = null;
+            if (stateProp != null)
+            {
+                state = stateProp.GetValue(null);
+            }
+            else
+            {
+                // 尝试字段
+                var stateField = fihType.GetField("state",
+                    BindingFlags.Public | BindingFlags.Static);
+                if (stateField != null)
+                {
+                    state = stateField.GetValue(null);
+                }
+            }
 
-            object state = stateProp.GetValue(null);
             if (state == null) return;
 
+            // 设置mainThrottle
             var throttleProp = state.GetType().GetProperty("mainThrottle",
                 BindingFlags.Public | BindingFlags.Instance);
-            if (throttleProp == null) return;
-
-            throttleProp.SetValue(state, throttle);
+            if (throttleProp != null)
+            {
+                throttleProp.SetValue(state, throttle);
+            }
+            else
+            {
+                var throttleField = state.GetType().GetField("mainThrottle",
+                    BindingFlags.Public | BindingFlags.Instance);
+                throttleField?.SetValue(state, throttle);
+            }
         }
 
         #endregion
@@ -540,19 +773,33 @@ namespace KSPLaunchCountdown
         #region 通用辅助
 
         /// <summary>
+        /// 获取类型的静态实例（通过Instance属性或字段）
+        /// </summary>
+        private static object GetStaticInstance(Type type)
+        {
+            // 尝试属性
+            var instanceProp = type.GetProperty("Instance",
+                BindingFlags.Public | BindingFlags.Static);
+            if (instanceProp != null)
+            {
+                return instanceProp.GetValue(null);
+            }
+
+            // 尝试字段
+            var instanceField = type.GetField("Instance",
+                BindingFlags.Public | BindingFlags.Static);
+            return instanceField?.GetValue(null);
+        }
+
+        /// <summary>
         /// 触发GameEvents中的无参数事件
         /// </summary>
-        /// <param name="eventName">事件字段名</param>
         private static void FireGameEvent(string eventName)
         {
             var gameEventsType = ResolveType("GameEvents");
             if (gameEventsType == null) return;
 
-            var eventField = gameEventsType.GetField(eventName,
-                BindingFlags.Public | BindingFlags.Static);
-            if (eventField == null) return;
-
-            object eventData = eventField.GetValue(null);
+            object eventData = FindGameEventField(gameEventsType, eventName);
             if (eventData == null) return;
 
             var fireMethod = eventData.GetType().GetMethod("Fire",
