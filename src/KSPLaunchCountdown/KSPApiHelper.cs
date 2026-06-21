@@ -311,7 +311,9 @@ namespace KSPLaunchCountdown
 
         /// <summary>
         /// 激活下一级（等效按空格键）
-        /// StageManager在精简DLL中缺失，需通过反射调用
+        /// 参考MechJeb的ImmediateStage方法，直接调用StageManager.ActivateNextStage()
+        /// StageManager在精简DLL中缺失，需通过反射从运行时完整DLL中获取
+        /// 注意：GameEvents.StageManager是事件容器（嵌套类），与顶层StageManager不同
         /// </summary>
         public static void ActivateNextStage()
         {
@@ -332,16 +334,25 @@ namespace KSPLaunchCountdown
                 return;
             }
 
-            // 尝试静态方法
+            // 参考MJ: StageManager.ActivateNextStage()
+            // ActivateNextStage是静态方法
             var method = stageManagerType.GetMethod("ActivateNextStage",
                 BindingFlags.Public | BindingFlags.Static);
             if (method != null)
             {
-                method.Invoke(null, null);
-                return;
+                try
+                {
+                    method.Invoke(null, null);
+                    Debug.Log($"{LOG_TAG} StageManager.ActivateNextStage() 调用成功");
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogError($"{LOG_TAG} StageManager.ActivateNextStage() 调用失败: {ex.Message}");
+                }
             }
 
-            // 尝试实例方法（通过Instance属性获取实例）
+            // 备用方案：尝试实例方法（通过Instance属性获取实例）
             var instanceProp = stageManagerType.GetProperty("Instance",
                 BindingFlags.Public | BindingFlags.Static);
             object inst = instanceProp != null ? instanceProp.GetValue(null) : null;
@@ -357,7 +368,18 @@ namespace KSPLaunchCountdown
             {
                 method = stageManagerType.GetMethod("ActivateNextStage",
                     BindingFlags.Public | BindingFlags.Instance);
-                method?.Invoke(inst, null);
+                if (method != null)
+                {
+                    try
+                    {
+                        method.Invoke(inst, null);
+                        Debug.Log($"{LOG_TAG} StageManager.Instance.ActivateNextStage() 调用成功");
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.LogError($"{LOG_TAG} 实例方法ActivateNextStage()调用失败: {ex.Message}");
+                    }
+                }
             }
         }
 
