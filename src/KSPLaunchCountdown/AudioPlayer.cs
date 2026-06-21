@@ -109,6 +109,44 @@ namespace KSPLaunchCountdown
         {
             isLoading = true;
 
+            // 先检查音频是否存在于GameDatabase中
+            bool exists = GameDatabase.Instance.ExistsAudioClip(dbPath);
+            if (!exists)
+            {
+                Debug.LogError($"{LOG_TAG} GameDatabase中不存在音频: {dbPath}");
+                // 调试：列出GameDatabase中包含"KSPLaunchCountdown"的所有音频
+                Debug.Log($"{LOG_TAG} 调试：列出GameDatabase中包含Launch的音频:");
+                var allClips = GameDatabase.Instance.AudioClipNameContains("Launch");
+                if (allClips != null)
+                {
+                    foreach (var c in allClips)
+                    {
+                        Debug.Log($"  音频: {c.name}");
+                    }
+                }
+                // 也搜索包含Countdown的
+                var countdownClips = GameDatabase.Instance.AudioClipNameContains("Countdown");
+                if (countdownClips != null)
+                {
+                    foreach (var c in countdownClips)
+                    {
+                        Debug.Log($"  音频: {c.name}");
+                    }
+                }
+                // 也搜索包含DFH的
+                var dfhClips = GameDatabase.Instance.AudioClipNameContains("DFH");
+                if (dfhClips != null)
+                {
+                    foreach (var c in dfhClips)
+                    {
+                        Debug.Log($"  音频: {c.name}");
+                    }
+                }
+                Debug.LogError($"{LOG_TAG} 请确认：1)音频文件为.ogg格式 2)文件已放入GameData目录 3)路径不含扩展名");
+                isLoading = false;
+                yield break;
+            }
+
             // 使用KSP的GameDatabase加载音频
             // GameDatabase在游戏启动时已扫描GameData目录下的所有资源文件
             // 路径格式：模组名/目录/文件名（不含扩展名和GameData前缀）
@@ -119,7 +157,7 @@ namespace KSPLaunchCountdown
             if (clip == null)
             {
                 Debug.LogError($"{LOG_TAG} 音频加载失败，路径: {dbPath}。" +
-                    "请确认音频文件已放入GameData目录且路径正确");
+                    "GetAudioClip返回null，请确认音频文件格式为.ogg且未损坏");
                 yield break;
             }
 

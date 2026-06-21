@@ -307,80 +307,114 @@ namespace KSPLaunchCountdown
 
         #endregion
 
-        #region StageManager 相关
+        #region Staging / StageManager 相关
 
         /// <summary>
         /// 激活下一级（等效按空格键）
-        /// 参考MechJeb的ImmediateStage方法，直接调用StageManager.ActivateNextStage()
-        /// StageManager在精简DLL中缺失，需通过反射从运行时完整DLL中获取
-        /// 注意：GameEvents.StageManager是事件容器（嵌套类），与顶层StageManager不同
+        /// 参考MechJeb的ImmediateStage方法，尝试调用StageManager.ActivateNextStage()
+        /// KSP API文档中分级类名为Staging，但MJ使用StageManager，两者都尝试
+        /// 
+        /// 查找优先级：
+        ///   1. StageManager.ActivateNextStage() - MJ使用的方式
+        ///   2. Staging.ActivateNextStage() - KSP Wiki文档中的方式
+        ///   3. 实例方法 - 备用方案
         /// </summary>
         public static void ActivateNextStage()
         {
-            // 运行时从完整DLL解析StageManager类型
-            Type stageManagerType = null;
+            // 运行时从完整DLL解析类型
+            Assembly kspAsm = null;
             foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
             {
                 if (asm.GetName().Name == "Assembly-CSharp")
                 {
-                    stageManagerType = asm.GetType("StageManager");
+                    kspAsm = asm;
                     break;
                 }
             }
 
-            if (stageManagerType == null)
+            if (kspAsm == null)
             {
-                Debug.LogError($"{LOG_TAG} 未找到StageManager类型");
+                Debug.LogError($"{LOG_TAG} 未找到Assembly-CSharp程序集");
                 return;
             }
 
-            // 参考MJ: StageManager.ActivateNextStage()
-            // ActivateNextStage是静态方法
-            var method = stageManagerType.GetMethod("ActivateNextStage",
+            // 尝试1: StageManager.ActivateNextStage() - MJ使用的方式
+            Type stageManagerType = kspAsm.GetType("StageManager");
+            if (stageManagerType != null)
+            {
+                if (TryInvokeActivateNextStage(stageManagerType, "StageManager"))
+                    return;
+            }
+
+            // 尝试2: Staging.ActivateNextStage() - KSP Wiki文档中的方式
+            Type stagingType = kspAsm.GetType("Staging");
+            if (stagingType != null)
+            {
+                if (TryInvokeActivateNextStage(stagingType, "Staging"))
+                    return;
+            }
+
+            Debug.LogError($"{LOG_TAG} 未找到StageManager或Staging类型，无法激活下一级");
+        }
+
+        /// <summary>
+        /// 尝试调用类型的ActivateNextStage方法
+        /// 先尝试静态方法，再尝试实例方法
+        /// </summary>
+        /// <param name="type">类型</param>
+        /// <param name="typeName">类型名称（用于日志）</param>
+        /// <returns>是否成功调用</returns>
+        private static bool TryInvokeActivateNextStage(Type type, string typeName)
+        {
+            // 尝试静态方法
+            var method = type.GetMethod("ActivateNextStage",
                 BindingFlags.Public | BindingFlags.Static);
             if (method != null)
             {
                 try
                 {
                     method.Invoke(null, null);
-                    Debug.Log($"{LOG_TAG} StageManager.ActivateNextStage() 调用成功");
-                    return;
+                    Debug.Log($"{LOG_TAG} {typeName}.ActivateNextStage() 调用成功");
+                    return true;
                 }
                 catch (Exception ex)
                 {
-                    Debug.LogError($"{LOG_TAG} StageManager.ActivateNextStage() 调用失败: {ex.Message}");
+                    Debug.LogError($"{LOG_TAG} {typeName}.ActivateNextStage() 调用失败: {ex.Message}");
                 }
             }
 
-            // 备用方案：尝试实例方法（通过Instance属性获取实例）
-            var instanceProp = stageManagerType.GetProperty("Instance",
+            // 尝试实例方法（通过Instance属性获取实例）
+            var instanceProp = type.GetProperty("Instance",
                 BindingFlags.Public | BindingFlags.Static);
             object inst = instanceProp != null ? instanceProp.GetValue(null) : null;
 
             if (inst == null)
             {
-                var instanceField = stageManagerType.GetField("Instance",
+                var instanceField = type.GetField("Instance",
                     BindingFlags.Public | BindingFlags.Static);
                 inst = instanceField?.GetValue(null);
             }
 
             if (inst != null)
             {
-                method = stageManagerType.GetMethod("ActivateNextStage",
+                method = type.GetMethod("ActivateNextStage",
                     BindingFlags.Public | BindingFlags.Instance);
                 if (method != null)
                 {
                     try
                     {
                         method.Invoke(inst, null);
-                        Debug.Log($"{LOG_TAG} StageManager.Instance.ActivateNextStage() 调用成功");
+                        Debug.Log($"{LOG_TAG} {typeName}.Instance.ActivateNextStage() 调用成功");
+                        return true;
                     }
                     catch (Exception ex)
                     {
-                        Debug.LogError($"{LOG_TAG} 实例方法ActivateNextStage()调用失败: {ex.Message}");
+                        Debug.LogError($"{LOG_TAG} {typeName}实例方法ActivateNextStage()调用失败: {ex.Message}");
                     }
                 }
             }
+
+            return false;
         }
 
         #endregion
