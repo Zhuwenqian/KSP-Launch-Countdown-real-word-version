@@ -1,0 +1,140 @@
+<!--
+  KSPLaunchCountdown.csproj - KSP1 发射倒计时模组项目文件
+
+  用途：定义KSP1模组的编译配置，包括目标框架、引用DLL、输出路径等。
+  该项目面向 .NET Framework 4.7.2，与KSP1游戏运行时兼容。
+  所有KSP和Unity引用DLL位于项目根目录的 "KSP DLL" 文件夹中。
+  编译输出到项目根目录的 "build" 文件夹，方便部署到KSP的GameData目录。
+-->
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- 目标框架：KSP1 使用 .NET Framework 4.7.2（基于 Unity 2019/2020） -->
+    <TargetFramework>net472</TargetFramework>
+
+    <!-- 程序集名称 -->
+    <AssemblyName>KSPLaunchCountdown</AssemblyName>
+
+    <!-- 根命名空间 -->
+    <RootNamespace>KSPLaunchCountdown</RootNamespace>
+
+    <!-- 语言版本：C# 9.0，支持现代语法特性 -->
+    <LangVersion>9.0</LangVersion>
+
+    <!-- 不生成NuGet包 -->
+    <IsPackable>false</IsPackable>
+
+    <!-- 输出类型：类库（DLL），KSP模组本质是游戏加载的类库 -->
+    <OutputType>Library</OutputType>
+
+    <!-- 平台目标：x64，KSP1 64位运行 -->
+    <PlatformTarget>x64</PlatformTarget>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
+    <!-- Debug输出路径 -->
+    <OutputPath>..\..\build\Debug\</OutputPath>
+    <!-- 调试符号 -->
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
+    <!-- Release输出路径 -->
+    <OutputPath>..\..\build\Release\</OutputPath>
+    <DebugType>pdbonly</DebugType>
+    <DefineConstants>TRACE</DefineConstants>
+    <Optimize>true</Optimize>
+  </PropertyGroup>
+
+  <!--
+    KSP和Unity引用DLL
+    使用相对路径引用项目根目录下 "KSP DLL" 文件夹中的所有DLL。
+    这些DLL仅作为编译时引用，不会复制到输出目录（游戏运行时自带）。
+  -->
+  <ItemGroup>
+    <!-- KSP核心程序集 -->
+    <Reference Include="Assembly-CSharp">
+      <HintPath>..\..\KSP DLL\Assembly-CSharp.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Assembly-CSharp-firstpass">
+      <HintPath>..\..\KSP DLL\Assembly-CSharp-firstpass.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="KSPAssets">
+      <HintPath>..\..\KSP DLL\KSPAssets.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+
+    <!-- Unity引擎核心模块 -->
+    <Reference Include="UnityEngine">
+      <HintPath>..\..\KSP DLL\UnityEngine.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>..\..\KSP DLL\UnityEngine.CoreModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.IMGUIModule">
+      <HintPath>..\..\KSP DLL\UnityEngine.IMGUIModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.UI">
+      <HintPath>..\..\KSP DLL\UnityEngine.UI.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.UIModule">
+      <HintPath>..\..\KSP DLL\UnityEngine.UIModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.TextRenderingModule">
+      <HintPath>..\..\KSP DLL\UnityEngine.TextRenderingModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.AudioModule">
+      <HintPath>..\..\KSP DLL\UnityEngine.AudioModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.InputModule">
+      <HintPath>..\..\KSP DLL\UnityEngine.InputModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.InputLegacyModule">
+      <HintPath>..\..\KSP DLL\UnityEngine.InputLegacyModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.AssetBundleModule">
+      <HintPath>..\..\KSP DLL\UnityEngine.AssetBundleModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.UIElementsModule">
+      <HintPath>..\..\KSP DLL\UnityEngine.UIElementsModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Unity.Timeline">
+      <HintPath>..\..\KSP DLL\Unity.Timeline.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+
+    <!-- .NET系统库（KSP运行时自带，不复制到输出） -->
+    <Reference Include="System">
+      <HintPath>..\..\KSP DLL\System.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="System.Core">
+      <HintPath>..\..\KSP DLL\System.Core.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="System.Xml">
+      <HintPath>..\..\KSP DLL\System.Xml.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="System.Configuration">
+      <HintPath>..\..\KSP DLL\System.Configuration.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+</Project>
