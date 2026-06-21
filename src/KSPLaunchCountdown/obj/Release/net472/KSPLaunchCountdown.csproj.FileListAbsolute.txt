@@ -7,3 +7,4 @@ e:\Projects\KSP Launch Countdown\src\KSPLaunchCountdown\obj\Release\net472\KSPLa
 e:\Projects\KSP Launch Countdown\src\KSPLaunchCountdown\obj\Release\net472\KSPLaunchCountdown.csproj.CoreCompileInputs.cache
 e:\Projects\KSP Launch Countdown\src\KSPLaunchCountdown\obj\Release\net472\KSPLaunchCountdown.dll
 e:\Projects\KSP Launch Countdown\src\KSPLaunchCountdown\obj\Release\net472\KSPLaunchCountdown.pdb
+e:\Projects\KSP Launch Countdown\src\KSPLaunchCountdown\obj\Release\net472\KSPLaunchCountdown.sourcelink.json
