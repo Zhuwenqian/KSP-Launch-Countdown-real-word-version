@@ -97,13 +97,13 @@ namespace KSPLaunchCountdown
                 }
             }
 
-            // Ctrl+K快捷键：调试 - 扫描运行时分级相关类型
-            // 用于确定KSP运行时中StageManager/Staging的实际类名和方法
+            // Ctrl+K快捷键：调试 - 监听空格分级调用栈
+            // 开启后按空格分级，日志会打印完整调用栈，显示KSP内部调用的分级方法
             if (HighLogic.LoadedSceneIsFlight
                 && (Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl))
                 && Input.GetKeyDown(KeyCode.K))
             {
-                KSPApiHelper.ScanStagingTypes();
+                KSPApiHelper.StartStagingTrace();
             }
         }
 

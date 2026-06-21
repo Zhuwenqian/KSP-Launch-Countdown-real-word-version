@@ -360,6 +360,62 @@ namespace KSPLaunchCountdown
         }
 
         /// <summary>
+        /// 是否正在监听空格键分级事件（用于调试）
+        /// </summary>
+        private static bool isListeningForStaging = false;
+
+        /// <summary>
+        /// 开始监听空格键分级事件
+        /// 注册GameEvents.onStageActivate回调，当玩家按空格分级时
+        /// 打印完整的调用栈，从而确定KSP内部调用的分级方法
+        /// 
+        /// 使用方式：在飞行场景中按Ctrl+K开启监听，然后按空格分级，
+        /// 查看KSP日志中的调用栈信息
+        /// </summary>
+        public static void StartStagingTrace()
+        {
+            if (isListeningForStaging) return;
+
+            // 注册onStageActivate事件，打印调用栈
+            var field = typeof(GameEvents).GetField("onStageActivate",
+                BindingFlags.Public | BindingFlags.Static);
+            if (field != null)
+            {
+                object eventData = field.GetValue(null);
+                if (eventData != null)
+                {
+                    var addMethod = eventData.GetType().GetMethod("Add",
+                        BindingFlags.Public | BindingFlags.Instance);
+                    if (addMethod != null)
+                    {
+                        Type delegateType = addMethod.GetParameters()[0].ParameterType;
+                        // 创建回调：打印调用栈
+                        Action<int> stagingCallback = OnStageActivateTraced;
+                        Delegate convertedCallback = Delegate.CreateDelegate(
+                            delegateType, stagingCallback.Target, stagingCallback.Method);
+                        addMethod.Invoke(eventData, new object[] { convertedCallback });
+                        isListeningForStaging = true;
+                        Debug.Log($"{LOG_TAG} 空格分级监听已开启 - 请按空格键分级，查看日志中的调用栈");
+                    }
+                }
+            }
+            else
+            {
+                Debug.LogError($"{LOG_TAG} 未找到GameEvents.onStageActivate事件");
+            }
+        }
+
+        /// <summary>
+        /// onStageActivate事件回调
+        /// 打印调用栈，用于确定KSP内部调用的分级方法
+        /// </summary>
+        private static void OnStageActivateTraced(int stage)
+        {
+            Debug.Log($"{LOG_TAG} === 检测到分级事件! stage={stage} ===");
+            Debug.Log($"{LOG_TAG} 调用栈:\n{Environment.StackTrace}");
+        }
+
+        /// <summary>
         /// 激活下一级（等效按空格键）
         /// 
         /// 查找优先级：
