@@ -311,13 +311,19 @@ namespace KSPLaunchCountdown
         #region Staging / StageManager 相关
 
         /// <summary>
-        /// 运行时扫描Assembly-CSharp中所有包含Stage的类型
-        /// 用于调试：确定KSP运行时中分级相关的类名和方法
+        /// 运行时调试：扫描分级相关的类型和场景中的对象
+        /// 1. 扫描Assembly-CSharp中所有包含Stage的类型及其方法
+        /// 2. 通过FindObjectOfType查找场景中所有包含Stage的MonoBehaviour实例
+        /// 3. 列出GameEvents中所有包含Stage的事件字段
+        /// 
+        /// 使用方式：在飞行场景中按Ctrl+K触发，查看KSP日志
         /// </summary>
         public static void ScanStagingTypes()
         {
-            Debug.Log($"{LOG_TAG} === 扫描运行时分级相关类型 ===");
+            Debug.Log($"{LOG_TAG} ========== 分级调试扫描 ==========");
 
+            // 第1步：扫描类型
+            Debug.Log($"{LOG_TAG} --- 1. 扫描Assembly-CSharp中Stage相关类型 ---");
             foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
             {
                 if (asm.GetName().Name != "Assembly-CSharp") continue;
@@ -326,11 +332,9 @@ namespace KSPLaunchCountdown
                 {
                     foreach (var t in asm.GetTypes())
                     {
-                        if (t.Name.Contains("Stage") || t.Name.Contains("staging") || t.Name.Contains("Staging"))
+                        if (t.Name.Contains("Stage") || t.Name.Contains("Staging"))
                         {
                             Debug.Log($"  类型: {t.FullName} (IsClass={t.IsClass}, IsEnum={t.IsEnum})");
-
-                            // 列出包含Activate的方法
                             foreach (var m in t.GetMethods(BindingFlags.Public | BindingFlags.Static | BindingFlags.Instance | BindingFlags.DeclaredOnly))
                             {
                                 if (m.Name.Contains("Activate") || m.Name.Contains("Stage"))
@@ -349,83 +353,111 @@ namespace KSPLaunchCountdown
                         foreach (var t in ex.Types)
                         {
                             if (t != null && (t.Name.Contains("Stage") || t.Name.Contains("Staging")))
-                            {
                                 Debug.Log($"  类型(部分加载): {t.FullName}");
+                        }
+                    }
+                }
+                break;
+            }
+
+            // 第2步：查找场景中的分级管理器实例
+            Debug.Log($"{LOG_TAG} --- 2. 查找场景中Stage相关MonoBehaviour ---");
+            try
+            {
+                var allMono = UnityEngine.Object.FindObjectsOfType<MonoBehaviour>();
+                foreach (var obj in allMono)
+                {
+                    var typeName = obj.GetType().Name;
+                    if (typeName.Contains("Stage") || typeName.Contains("Staging"))
+                    {
+                        Debug.Log($"  实例: {obj.GetType().FullName} (gameObject={obj.gameObject.name})");
+                        // 列出该实例的所有公共方法
+                        foreach (var m in obj.GetType().GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly))
+                        {
+                            Debug.Log($"    方法: instance {m.ReturnType.Name} {m.Name}({string.Join(", ", m.GetParameters().Select(p => p.ParameterType.Name + " " + p.Name))})");
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"{LOG_TAG} 查找场景对象失败: {ex.Message}");
+            }
+
+            // 第3步：列出GameEvents中Stage相关字段
+            Debug.Log($"{LOG_TAG} --- 3. GameEvents中Stage相关字段 ---");
+            foreach (var f in typeof(GameEvents).GetFields(BindingFlags.Public | BindingFlags.Static))
+            {
+                if (f.Name.Contains("Stage") || f.Name.Contains("stage"))
+                {
+                    Debug.Log($"  字段: {f.Name} : {f.FieldType.Name}");
+                }
+            }
+
+            // 第4步：搜索所有包含ActivateNextStage方法的类型（不限类名）
+            Debug.Log($"{LOG_TAG} --- 4. 搜索所有包含ActivateNextStage方法的类型 ---");
+            foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                if (asm.GetName().Name != "Assembly-CSharp") continue;
+
+                try
+                {
+                    foreach (var t in asm.GetTypes())
+                    {
+                        var m = t.GetMethod("ActivateNextStage",
+                            BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance);
+                        if (m != null)
+                        {
+                            var mod = m.IsStatic ? "static" : "instance";
+                            Debug.Log($"  找到: {t.FullName}.{m.Name}() ({mod})");
+                        }
+                    }
+                }
+                catch (ReflectionTypeLoadException ex)
+                {
+                    if (ex.Types != null)
+                    {
+                        foreach (var t in ex.Types)
+                        {
+                            if (t != null)
+                            {
+                                var m = t.GetMethod("ActivateNextStage",
+                                    BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance);
+                                if (m != null)
+                                {
+                                    var mod = m.IsStatic ? "static" : "instance";
+                                    Debug.Log($"  找到(部分): {t.FullName}.{m.Name}() ({mod})");
+                                }
                             }
                         }
                     }
                 }
                 break;
             }
-        }
 
-        /// <summary>
-        /// 是否正在监听空格键分级事件（用于调试）
-        /// </summary>
-        private static bool isListeningForStaging = false;
-
-        /// <summary>
-        /// 开始监听空格键分级事件
-        /// 注册GameEvents.onStageActivate回调，当玩家按空格分级时
-        /// 打印完整的调用栈，从而确定KSP内部调用的分级方法
-        /// 
-        /// 使用方式：在飞行场景中按Ctrl+K开启监听，然后按空格分级，
-        /// 查看KSP日志中的调用栈信息
-        /// </summary>
-        public static void StartStagingTrace()
-        {
-            if (isListeningForStaging) return;
-
-            // 注册onStageActivate事件，打印调用栈
-            var field = typeof(GameEvents).GetField("onStageActivate",
-                BindingFlags.Public | BindingFlags.Static);
-            if (field != null)
-            {
-                object eventData = field.GetValue(null);
-                if (eventData != null)
-                {
-                    var addMethod = eventData.GetType().GetMethod("Add",
-                        BindingFlags.Public | BindingFlags.Instance);
-                    if (addMethod != null)
-                    {
-                        Type delegateType = addMethod.GetParameters()[0].ParameterType;
-                        // 创建回调：打印调用栈
-                        Action<int> stagingCallback = OnStageActivateTraced;
-                        Delegate convertedCallback = Delegate.CreateDelegate(
-                            delegateType, stagingCallback.Target, stagingCallback.Method);
-                        addMethod.Invoke(eventData, new object[] { convertedCallback });
-                        isListeningForStaging = true;
-                        Debug.Log($"{LOG_TAG} 空格分级监听已开启 - 请按空格键分级，查看日志中的调用栈");
-                    }
-                }
-            }
-            else
-            {
-                Debug.LogError($"{LOG_TAG} 未找到GameEvents.onStageActivate事件");
-            }
-        }
-
-        /// <summary>
-        /// onStageActivate事件回调
-        /// 打印调用栈，用于确定KSP内部调用的分级方法
-        /// </summary>
-        private static void OnStageActivateTraced(int stage)
-        {
-            Debug.Log($"{LOG_TAG} === 检测到分级事件! stage={stage} ===");
-            Debug.Log($"{LOG_TAG} 调用栈:\n{Environment.StackTrace}");
+            Debug.Log($"{LOG_TAG} ========== 扫描完成 ==========");
         }
 
         /// <summary>
         /// 激活下一级（等效按空格键）
         /// 
         /// 查找优先级：
-        ///   1. StageManager.ActivateNextStage() - MJ使用的方式
-        ///   2. Staging.ActivateNextStage() - KSP Wiki文档中的方式
-        ///   3. 模拟空格键按下 - 终极备用方案
+        ///   1. 模拟空格键输入（keybd_event）- 最可靠，走KSP完整输入流程
+        ///   2. FindObjectOfType查找场景中的分级管理器，反射调用
+        ///   3. 反射调用StageManager/Staging.ActivateNextStage()
         /// </summary>
         public static void ActivateNextStage()
         {
-            // 运行时从完整DLL解析类型
+            // 尝试1: 模拟空格键输入 - 最可靠，走KSP完整输入流程
+            // keybd_event在OS层面发送键盘事件，Unity旧输入系统会正常接收
+            if (SimulateSpacebar())
+                return;
+
+            // 尝试2: 通过FindObjectOfType查找场景中的分级管理器实例
+            if (TryActivateViaFindObjectOfType())
+                return;
+
+            // 尝试3: 反射调用StageManager.ActivateNextStage() / Staging.ActivateNextStage()
             Assembly kspAsm = null;
             foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
             {
@@ -436,84 +468,112 @@ namespace KSPLaunchCountdown
                 }
             }
 
-            if (kspAsm == null)
+            if (kspAsm != null)
             {
-                Debug.LogError($"{LOG_TAG} 未找到Assembly-CSharp程序集，尝试模拟空格键");
-                SimulateSpacebar();
-                return;
-            }
+                Type stageManagerType = kspAsm.GetType("StageManager");
+                if (stageManagerType != null && TryInvokeActivateNextStage(stageManagerType, "StageManager"))
+                    return;
 
-            // 尝试1: StageManager.ActivateNextStage() - MJ使用的方式
-            Type stageManagerType = kspAsm.GetType("StageManager");
-            if (stageManagerType != null)
-            {
-                if (TryInvokeActivateNextStage(stageManagerType, "StageManager"))
+                Type stagingType = kspAsm.GetType("Staging");
+                if (stagingType != null && TryInvokeActivateNextStage(stagingType, "Staging"))
                     return;
             }
-            else
-            {
-                Debug.Log($"{LOG_TAG} 运行时未找到StageManager类型");
-            }
 
-            // 尝试2: Staging.ActivateNextStage() - KSP Wiki文档中的方式
-            Type stagingType = kspAsm.GetType("Staging");
-            if (stagingType != null)
-            {
-                if (TryInvokeActivateNextStage(stagingType, "Staging"))
-                    return;
-            }
-            else
-            {
-                Debug.Log($"{LOG_TAG} 运行时未找到Staging类型");
-            }
-
-            // 尝试3: 模拟空格键按下 - 终极备用方案
-            Debug.LogWarning($"{LOG_TAG} 未找到StageManager或Staging类型，模拟空格键分级");
-            SimulateSpacebar();
+            Debug.LogError($"{LOG_TAG} 所有分级方式均失败");
         }
 
         /// <summary>
-        /// 模拟空格键按下
-        /// 通过设置Unity的Input模拟状态来触发KSP的分级操作
-        /// 这是最可靠的备用方案，因为KSP内部也是通过空格键触发分级
+        /// 通过FindObjectOfType查找场景中的分级管理器
+        /// 根据KSP运行时扫描结果，分级管理器是 KSP.UI.Screens.StageManager
+        /// 激活下一级的方法是 IncrementCurrentStage()（不是ActivateNextStage）
         /// </summary>
-        private static void SimulateSpacebar()
+        private static bool TryActivateViaFindObjectOfType()
         {
             try
             {
-                // KSP的分级绑定在Space键上
-                // 通过GameEvents触发分级事件
-                var stageField = typeof(GameEvents).GetField("onStageActivate",
-                    BindingFlags.Public | BindingFlags.Static);
-                if (stageField != null)
+                var allMono = UnityEngine.Object.FindObjectsOfType<MonoBehaviour>();
+                foreach (var obj in allMono)
                 {
-                    object eventData = stageField.GetValue(null);
-                    if (eventData != null)
+                    var typeName = obj.GetType().Name;
+                    if (typeName.Contains("Stage") || typeName.Contains("Staging"))
                     {
-                        var fireMethod = eventData.GetType().GetMethod("Fire",
+                        // 优先尝试IncrementCurrentStage（KSP1实际使用的分级方法）
+                        var method = obj.GetType().GetMethod("IncrementCurrentStage",
                             BindingFlags.Public | BindingFlags.Instance);
-                        if (fireMethod != null)
+                        if (method != null)
                         {
-                            // onStageActivate.Fire(int) 需要当前级数参数
-                            Vessel vessel = FlightGlobals.ActiveVessel;
-                            int currentStage = vessel != null ? vessel.currentStage - 1 : 0;
-                            fireMethod.Invoke(eventData, new object[] { currentStage });
-                            Debug.Log($"{LOG_TAG} 通过GameEvents.onStageActivate模拟分级成功");
-                            return;
+                            try
+                            {
+                                method.Invoke(obj, null);
+                                Debug.Log($"{LOG_TAG} {obj.GetType().FullName}.IncrementCurrentStage() 调用成功");
+                                return true;
+                            }
+                            catch (Exception ex)
+                            {
+                                Debug.LogError($"{LOG_TAG} {obj.GetType().FullName}.IncrementCurrentStage() 失败: {ex.Message}");
+                            }
+                        }
+
+                        // 备用：尝试ActivateNextStage
+                        method = obj.GetType().GetMethod("ActivateNextStage",
+                            BindingFlags.Public | BindingFlags.Instance);
+                        if (method != null)
+                        {
+                            try
+                            {
+                                method.Invoke(obj, null);
+                                Debug.Log($"{LOG_TAG} {obj.GetType().FullName}.ActivateNextStage() 调用成功");
+                                return true;
+                            }
+                            catch (Exception ex)
+                            {
+                                Debug.LogError($"{LOG_TAG} {obj.GetType().FullName}.ActivateNextStage() 失败: {ex.Message}");
+                            }
                         }
                     }
                 }
-
-                // 最终方案：直接设置Input模拟
-                Debug.LogWarning($"{LOG_TAG} GameEvents.onStageActivate不可用，尝试Input模拟");
-                // 注意：Unity的Input模拟在KSP中可能不生效，因为KSP使用自己的输入系统
-                // 但作为最后手段仍然尝试
             }
             catch (Exception ex)
             {
-                Debug.LogError($"{LOG_TAG} 模拟空格键分级失败: {ex.Message}");
+                Debug.LogError($"{LOG_TAG} FindObjectOfType查找失败: {ex.Message}");
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// 模拟空格键输入
+        /// 通过Windows API keybd_event模拟键盘输入，等效于用户按下空格键
+        /// KSP使用Unity旧输入系统，会正常接收OS层面的键盘事件
+        /// 
+        /// 注意：keybd_event发送的是OS级别的键盘事件，需要KSP窗口处于焦点状态
+        /// 返回true表示API调用成功（不代表KSP一定处理了该输入）
+        /// </summary>
+        /// <returns>是否成功调用API</returns>
+        private static bool SimulateSpacebar()
+        {
+            try
+            {
+                // 使用keybd_event模拟空格键
+                // VK_SPACE = 0x20, KEYEVENTF_KEYUP = 0x0002
+                keybd_event(0x20, 0, 0, UIntPtr.Zero);   // 按下空格键
+                keybd_event(0x20, 0, 2, UIntPtr.Zero);   // 释放空格键
+                Debug.Log($"{LOG_TAG} keybd_event模拟空格键输入成功");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"{LOG_TAG} keybd_event模拟空格键失败: {ex.Message}");
+                return false;
             }
         }
+
+        /// <summary>
+        /// Windows API keybd_input函数声明
+        /// 比SendInput更简单，不需要复杂的结构体
+        /// 参数：vk=虚拟键码, scan=扫描码(可忽略), flags=事件标志, extraInfo=附加信息
+        /// </summary>
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
 
         /// <summary>
         /// 尝试调用类型的ActivateNextStage方法
