@@ -1,0 +1,9 @@
+e:\Projects\KSP Launch Countdown\build\Release\net472\KSPLaunchCountdown.dll
+e:\Projects\KSP Launch Countdown\build\Release\net472\KSPLaunchCountdown.pdb
+e:\Projects\KSP Launch Countdown\src\KSPLaunchCountdown\obj\Release\net472\KSPLaunchCountdown.csproj.AssemblyReference.cache
+e:\Projects\KSP Launch Countdown\src\KSPLaunchCountdown\obj\Release\net472\KSPLaunchCountdown.GeneratedMSBuildEditorConfig.editorconfig
+e:\Projects\KSP Launch Countdown\src\KSPLaunchCountdown\obj\Release\net472\KSPLaunchCountdown.AssemblyInfoInputs.cache
+e:\Projects\KSP Launch Countdown\src\KSPLaunchCountdown\obj\Release\net472\KSPLaunchCountdown.AssemblyInfo.cs
+e:\Projects\KSP Launch Countdown\src\KSPLaunchCountdown\obj\Release\net472\KSPLaunchCountdown.csproj.CoreCompileInputs.cache
+e:\Projects\KSP Launch Countdown\src\KSPLaunchCountdown\obj\Release\net472\KSPLaunchCountdown.dll
+e:\Projects\KSP Launch Countdown\src\KSPLaunchCountdown\obj\Release\net472\KSPLaunchCountdown.pdb
