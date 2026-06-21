@@ -26,7 +26,6 @@
  */
 
 using System;
-using System.Linq;
 using System.Reflection;
 using UnityEngine;
 
@@ -308,248 +307,15 @@ namespace KSPLaunchCountdown
 
         #endregion
 
-        #region Staging / StageManager 相关
-
-        /// <summary>
-        /// 运行时调试：扫描分级相关的类型和场景中的对象
-        /// 1. 扫描Assembly-CSharp中所有包含Stage的类型及其方法
-        /// 2. 通过FindObjectOfType查找场景中所有包含Stage的MonoBehaviour实例
-        /// 3. 列出GameEvents中所有包含Stage的事件字段
-        /// 
-        /// 使用方式：在飞行场景中按Ctrl+K触发，查看KSP日志
-        /// </summary>
-        public static void ScanStagingTypes()
-        {
-            Debug.Log($"{LOG_TAG} ========== 分级调试扫描 ==========");
-
-            // 第1步：扫描类型
-            Debug.Log($"{LOG_TAG} --- 1. 扫描Assembly-CSharp中Stage相关类型 ---");
-            foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
-            {
-                if (asm.GetName().Name != "Assembly-CSharp") continue;
-
-                try
-                {
-                    foreach (var t in asm.GetTypes())
-                    {
-                        if (t.Name.Contains("Stage") || t.Name.Contains("Staging"))
-                        {
-                            Debug.Log($"  类型: {t.FullName} (IsClass={t.IsClass}, IsEnum={t.IsEnum})");
-                            foreach (var m in t.GetMethods(BindingFlags.Public | BindingFlags.Static | BindingFlags.Instance | BindingFlags.DeclaredOnly))
-                            {
-                                if (m.Name.Contains("Activate") || m.Name.Contains("Stage"))
-                                {
-                                    var mod = m.IsStatic ? "static" : "instance";
-                                    Debug.Log($"    方法: {mod} {m.ReturnType.Name} {m.Name}({string.Join(", ", m.GetParameters().Select(p => p.ParameterType.Name + " " + p.Name))})");
-                                }
-                            }
-                        }
-                    }
-                }
-                catch (ReflectionTypeLoadException ex)
-                {
-                    if (ex.Types != null)
-                    {
-                        foreach (var t in ex.Types)
-                        {
-                            if (t != null && (t.Name.Contains("Stage") || t.Name.Contains("Staging")))
-                                Debug.Log($"  类型(部分加载): {t.FullName}");
-                        }
-                    }
-                }
-                break;
-            }
-
-            // 第2步：查找场景中的分级管理器实例
-            Debug.Log($"{LOG_TAG} --- 2. 查找场景中Stage相关MonoBehaviour ---");
-            try
-            {
-                var allMono = UnityEngine.Object.FindObjectsOfType<MonoBehaviour>();
-                foreach (var obj in allMono)
-                {
-                    var typeName = obj.GetType().Name;
-                    if (typeName.Contains("Stage") || typeName.Contains("Staging"))
-                    {
-                        Debug.Log($"  实例: {obj.GetType().FullName} (gameObject={obj.gameObject.name})");
-                        // 列出该实例的所有公共方法
-                        foreach (var m in obj.GetType().GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly))
-                        {
-                            Debug.Log($"    方法: instance {m.ReturnType.Name} {m.Name}({string.Join(", ", m.GetParameters().Select(p => p.ParameterType.Name + " " + p.Name))})");
-                        }
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.LogError($"{LOG_TAG} 查找场景对象失败: {ex.Message}");
-            }
-
-            // 第3步：列出GameEvents中Stage相关字段
-            Debug.Log($"{LOG_TAG} --- 3. GameEvents中Stage相关字段 ---");
-            foreach (var f in typeof(GameEvents).GetFields(BindingFlags.Public | BindingFlags.Static))
-            {
-                if (f.Name.Contains("Stage") || f.Name.Contains("stage"))
-                {
-                    Debug.Log($"  字段: {f.Name} : {f.FieldType.Name}");
-                }
-            }
-
-            // 第4步：搜索所有包含ActivateNextStage方法的类型（不限类名）
-            Debug.Log($"{LOG_TAG} --- 4. 搜索所有包含ActivateNextStage方法的类型 ---");
-            foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
-            {
-                if (asm.GetName().Name != "Assembly-CSharp") continue;
-
-                try
-                {
-                    foreach (var t in asm.GetTypes())
-                    {
-                        var m = t.GetMethod("ActivateNextStage",
-                            BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance);
-                        if (m != null)
-                        {
-                            var mod = m.IsStatic ? "static" : "instance";
-                            Debug.Log($"  找到: {t.FullName}.{m.Name}() ({mod})");
-                        }
-                    }
-                }
-                catch (ReflectionTypeLoadException ex)
-                {
-                    if (ex.Types != null)
-                    {
-                        foreach (var t in ex.Types)
-                        {
-                            if (t != null)
-                            {
-                                var m = t.GetMethod("ActivateNextStage",
-                                    BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance);
-                                if (m != null)
-                                {
-                                    var mod = m.IsStatic ? "static" : "instance";
-                                    Debug.Log($"  找到(部分): {t.FullName}.{m.Name}() ({mod})");
-                                }
-                            }
-                        }
-                    }
-                }
-                break;
-            }
-
-            Debug.Log($"{LOG_TAG} ========== 扫描完成 ==========");
-        }
+        #region Staging 相关
 
         /// <summary>
         /// 激活下一级（等效按空格键）
-        /// 
-        /// 查找优先级：
-        ///   1. 模拟空格键输入（keybd_event）- 最可靠，走KSP完整输入流程
-        ///   2. FindObjectOfType查找场景中的分级管理器，反射调用
-        ///   3. 反射调用StageManager/Staging.ActivateNextStage()
+        /// 通过Windows API keybd_event模拟空格键输入
+        /// KSP使用Unity旧输入系统，会正常接收OS层面的键盘事件
+        /// 这是最可靠的分级方式，走KSP完整的输入处理流程
         /// </summary>
         public static void ActivateNextStage()
-        {
-            // 尝试1: 模拟空格键输入 - 最可靠，走KSP完整输入流程
-            // keybd_event在OS层面发送键盘事件，Unity旧输入系统会正常接收
-            if (SimulateSpacebar())
-                return;
-
-            // 尝试2: 通过FindObjectOfType查找场景中的分级管理器实例
-            if (TryActivateViaFindObjectOfType())
-                return;
-
-            // 尝试3: 反射调用StageManager.ActivateNextStage() / Staging.ActivateNextStage()
-            Assembly kspAsm = null;
-            foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
-            {
-                if (asm.GetName().Name == "Assembly-CSharp")
-                {
-                    kspAsm = asm;
-                    break;
-                }
-            }
-
-            if (kspAsm != null)
-            {
-                Type stageManagerType = kspAsm.GetType("StageManager");
-                if (stageManagerType != null && TryInvokeActivateNextStage(stageManagerType, "StageManager"))
-                    return;
-
-                Type stagingType = kspAsm.GetType("Staging");
-                if (stagingType != null && TryInvokeActivateNextStage(stagingType, "Staging"))
-                    return;
-            }
-
-            Debug.LogError($"{LOG_TAG} 所有分级方式均失败");
-        }
-
-        /// <summary>
-        /// 通过FindObjectOfType查找场景中的分级管理器
-        /// 根据KSP运行时扫描结果，分级管理器是 KSP.UI.Screens.StageManager
-        /// 激活下一级的方法是 IncrementCurrentStage()（不是ActivateNextStage）
-        /// </summary>
-        private static bool TryActivateViaFindObjectOfType()
-        {
-            try
-            {
-                var allMono = UnityEngine.Object.FindObjectsOfType<MonoBehaviour>();
-                foreach (var obj in allMono)
-                {
-                    var typeName = obj.GetType().Name;
-                    if (typeName.Contains("Stage") || typeName.Contains("Staging"))
-                    {
-                        // 优先尝试IncrementCurrentStage（KSP1实际使用的分级方法）
-                        var method = obj.GetType().GetMethod("IncrementCurrentStage",
-                            BindingFlags.Public | BindingFlags.Instance);
-                        if (method != null)
-                        {
-                            try
-                            {
-                                method.Invoke(obj, null);
-                                Debug.Log($"{LOG_TAG} {obj.GetType().FullName}.IncrementCurrentStage() 调用成功");
-                                return true;
-                            }
-                            catch (Exception ex)
-                            {
-                                Debug.LogError($"{LOG_TAG} {obj.GetType().FullName}.IncrementCurrentStage() 失败: {ex.Message}");
-                            }
-                        }
-
-                        // 备用：尝试ActivateNextStage
-                        method = obj.GetType().GetMethod("ActivateNextStage",
-                            BindingFlags.Public | BindingFlags.Instance);
-                        if (method != null)
-                        {
-                            try
-                            {
-                                method.Invoke(obj, null);
-                                Debug.Log($"{LOG_TAG} {obj.GetType().FullName}.ActivateNextStage() 调用成功");
-                                return true;
-                            }
-                            catch (Exception ex)
-                            {
-                                Debug.LogError($"{LOG_TAG} {obj.GetType().FullName}.ActivateNextStage() 失败: {ex.Message}");
-                            }
-                        }
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.LogError($"{LOG_TAG} FindObjectOfType查找失败: {ex.Message}");
-            }
-            return false;
-        }
-
-        /// <summary>
-        /// 模拟空格键输入
-        /// 通过Windows API keybd_event模拟键盘输入，等效于用户按下空格键
-        /// KSP使用Unity旧输入系统，会正常接收OS层面的键盘事件
-        /// 
-        /// 注意：keybd_event发送的是OS级别的键盘事件，需要KSP窗口处于焦点状态
-        /// 返回true表示API调用成功（不代表KSP一定处理了该输入）
-        /// </summary>
-        /// <returns>是否成功调用API</returns>
-        private static bool SimulateSpacebar()
         {
             try
             {
@@ -557,80 +323,21 @@ namespace KSPLaunchCountdown
                 // VK_SPACE = 0x20, KEYEVENTF_KEYUP = 0x0002
                 keybd_event(0x20, 0, 0, UIntPtr.Zero);   // 按下空格键
                 keybd_event(0x20, 0, 2, UIntPtr.Zero);   // 释放空格键
-                Debug.Log($"{LOG_TAG} keybd_event模拟空格键输入成功");
-                return true;
+                Debug.Log($"{LOG_TAG} 模拟空格键分级成功");
             }
             catch (Exception ex)
             {
-                Debug.LogError($"{LOG_TAG} keybd_event模拟空格键失败: {ex.Message}");
-                return false;
+                Debug.LogError($"{LOG_TAG} 模拟空格键分级失败: {ex.Message}");
             }
         }
 
         /// <summary>
-        /// Windows API keybd_input函数声明
-        /// 比SendInput更简单，不需要复杂的结构体
-        /// 参数：vk=虚拟键码, scan=扫描码(可忽略), flags=事件标志, extraInfo=附加信息
+        /// Windows API keybd_event函数声明
+        /// 在OS层面发送键盘事件，Unity旧输入系统会正常接收
+        /// 参数：bVk=虚拟键码, bScan=扫描码(可忽略), dwFlags=事件标志, dwExtraInfo=附加信息
         /// </summary>
         [System.Runtime.InteropServices.DllImport("user32.dll")]
         private static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
-
-        /// <summary>
-        /// 尝试调用类型的ActivateNextStage方法
-        /// 先尝试静态方法，再尝试实例方法
-        /// </summary>
-        private static bool TryInvokeActivateNextStage(Type type, string typeName)
-        {
-            // 尝试静态方法
-            var method = type.GetMethod("ActivateNextStage",
-                BindingFlags.Public | BindingFlags.Static);
-            if (method != null)
-            {
-                try
-                {
-                    method.Invoke(null, null);
-                    Debug.Log($"{LOG_TAG} {typeName}.ActivateNextStage() 调用成功");
-                    return true;
-                }
-                catch (Exception ex)
-                {
-                    Debug.LogError($"{LOG_TAG} {typeName}.ActivateNextStage() 调用失败: {ex.Message}");
-                }
-            }
-
-            // 尝试实例方法（通过Instance属性获取实例）
-            var instanceProp = type.GetProperty("Instance",
-                BindingFlags.Public | BindingFlags.Static);
-            object inst = instanceProp != null ? instanceProp.GetValue(null) : null;
-
-            if (inst == null)
-            {
-                var instanceField = type.GetField("Instance",
-                    BindingFlags.Public | BindingFlags.Static);
-                inst = instanceField?.GetValue(null);
-            }
-
-            if (inst != null)
-            {
-                method = type.GetMethod("ActivateNextStage",
-                    BindingFlags.Public | BindingFlags.Instance);
-                if (method != null)
-                {
-                    try
-                    {
-                        method.Invoke(inst, null);
-                        Debug.Log($"{LOG_TAG} {typeName}.Instance.ActivateNextStage() 调用成功");
-                        return true;
-                    }
-                    catch (Exception ex)
-                    {
-                        Debug.LogError($"{LOG_TAG} {typeName}实例方法ActivateNextStage()调用失败: {ex.Message}");
-                    }
-                }
-            }
-
-            return false;
-        }
 
         #endregion
 

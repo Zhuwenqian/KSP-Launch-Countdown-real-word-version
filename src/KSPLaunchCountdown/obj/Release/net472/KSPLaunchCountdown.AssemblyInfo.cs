@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("KSPLaunchCountdown")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Release")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+50d5cb8ccf7c103301d161f25b32a02773155f2d")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+465152fa47a5177acbb464f5c044554792f7025c")]
 [assembly: System.Reflection.AssemblyProductAttribute("KSPLaunchCountdown")]
 [assembly: System.Reflection.AssemblyTitleAttribute("KSPLaunchCountdown")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
