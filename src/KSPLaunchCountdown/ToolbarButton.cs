@@ -96,6 +96,15 @@ namespace KSPLaunchCountdown
                     Debug.Log($"{LOG_TAG} Ctrl+L 切换菜单: {(countdownMenu.IsVisible ? "显示" : "隐藏")}");
                 }
             }
+
+            // Ctrl+K快捷键：调试 - 扫描运行时分级相关类型
+            // 用于确定KSP运行时中StageManager/Staging的实际类名和方法
+            if (HighLogic.LoadedSceneIsFlight
+                && (Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl))
+                && Input.GetKeyDown(KeyCode.K))
+            {
+                KSPApiHelper.ScanStagingTypes();
+            }
         }
 
         /// <summary>
