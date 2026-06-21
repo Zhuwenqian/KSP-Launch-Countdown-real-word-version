@@ -71,8 +71,8 @@ namespace KSPLaunchCountdown
                 return;
             }
 
-            // 立即设置满油门（通过反射）
-            KSPApiHelper.SetThrottle(1.0f);
+            // 立即设置满油门（FlightInputHandler在精简DLL中存在，可直接引用）
+            FlightInputHandler.state.mainThrottle = 1.0f;
 
             // 注册OnFlyByWire回调，持续保持满油门
             // 原因：FlightInputHandler.state每帧会被重置，

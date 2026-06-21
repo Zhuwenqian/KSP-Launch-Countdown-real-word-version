@@ -8,7 +8,12 @@
  *   - 在飞行场景的工具栏上添加模组按钮
  *   - 使用代码生成38x38像素的临时图标（橙色圆形+白色"C"字符）
  *   - 点击按钮时切换倒计时菜单的显示/隐藏
- *   - 场景切换或模组卸载时自动清理按钮和事件
+ *   - 场景切换或模组卸载时自动清理按钮
+ *
+ * 实现方式（参考MechJeb）：
+ *   不依赖GameEvents.onGUIApplicationLauncherReady事件，
+ *   而是在每帧Update中检查ApplicationLauncher.Ready状态，
+ *   就绪后立即注册按钮。这种方式更可靠，不会因事件时序问题导致按钮丢失。
  *
  * 兼容性说明：
  *   由于精简版Assembly-CSharp.dll缺少ApplicationLauncherButton等类型定义，
@@ -18,7 +23,7 @@
  * 按钮图标说明：
  *   当前使用代码生成的临时图标，后续可替换为正式的纹理图标。
  *   替换方式：将38x38像素的PNG纹理放入GameData/KSPLaunchCountdown/Textures/目录，
- *   然后修改OnLauncherReady方法中的图标加载代码。
+ *   然后修改SetupAppLauncher方法中的图标加载代码。
  *
  * 依赖：
  *   - Assembly-CSharp.dll (KSP核心，提供ApplicationLauncher、GameEvents等)
@@ -33,7 +38,7 @@ namespace KSPLaunchCountdown
 {
     /// <summary>
     /// 工具栏按钮管理器
-    /// 负责在KSP的ApplicationLauncher上注册和管理模组按钮
+    /// 参考MechJeb的实现模式：在Update中轮询ApplicationLauncher.Ready状态
     /// 通过KSPApiHelper反射调用KSP API，兼容精简版DLL
     /// </summary>
     public class ToolbarButton : MonoBehaviour
@@ -63,36 +68,60 @@ namespace KSPLaunchCountdown
         public void Initialize(CountdownMenu menu)
         {
             countdownMenu = menu;
-
-            // 注册ApplicationLauncher就绪事件（通过反射）
-            KSPApiHelper.AddOnLauncherReadyEvent(OnLauncherReady);
-            KSPApiHelper.AddOnLauncherDestroyedEvent(OnLauncherDestroyed);
-
-            // 如果Launcher已经就绪（场景切换后可能已就绪），直接注册
-            if (KSPApiHelper.GetApplicationLauncherInstance() != null && KSPApiHelper.IsApplicationLauncherReady())
-            {
-                OnLauncherReady();
-            }
-
             Debug.Log($"{LOG_TAG} 工具栏按钮初始化完成");
         }
 
         /// <summary>
-        /// ApplicationLauncher就绪回调
-        /// 在KSP的工具栏系统初始化完成后被调用，此时可以安全地添加按钮
+        /// Unity每帧更新
+        /// 参考MechJeb模式：每帧检查ApplicationLauncher.Ready状态，
+        /// 就绪后注册按钮。不依赖onGUIApplicationLauncherReady事件。
         /// </summary>
-        private void OnLauncherReady()
+        void Update()
         {
-            if (launcherButton != null)
+            // 仅在飞行场景且按钮未注册时尝试注册
+            if (launcherButton == null && HighLogic.LoadedSceneIsFlight)
             {
-                // 按钮已存在，无需重复添加
+                SetupAppLauncher();
+            }
+
+            // Ctrl+L快捷键兜底：切换菜单显示/隐藏
+            // 当工具栏按钮无法显示时，可通过此快捷键操作
+            if (HighLogic.LoadedSceneIsFlight
+                && (Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl))
+                && Input.GetKeyDown(KeyCode.L))
+            {
+                if (countdownMenu != null)
+                {
+                    countdownMenu.IsVisible = !countdownMenu.IsVisible;
+                    Debug.Log($"{LOG_TAG} Ctrl+L 切换菜单: {(countdownMenu.IsVisible ? "显示" : "隐藏")}");
+                }
+            }
+        }
+
+        /// <summary>
+        /// 设置ApplicationLauncher按钮
+        /// 参考MechJeb的SetupAppLauncher方法：
+        ///   1. 检查ApplicationLauncher.Ready
+        ///   2. 就绪后调用AddModApplication注册按钮
+        /// </summary>
+        private void SetupAppLauncher()
+        {
+            // 检查ApplicationLauncher是否就绪（参考MJ: if (!ApplicationLauncher.Ready) return;）
+            if (!KSPApiHelper.IsApplicationLauncherReady())
+            {
                 return;
             }
 
             // 生成临时图标纹理
-            iconTexture = GenerateIconTexture();
+            if (iconTexture == null)
+            {
+                iconTexture = GenerateIconTexture();
+            }
 
             // 添加模组按钮到ApplicationLauncher（通过反射）
+            // 参考MJ: ApplicationLauncher.Instance.AddModApplication(
+            //   ShowHideMasterWindow, ShowHideMasterWindow, null, null, null, null,
+            //   ApplicationLauncher.AppScenes.ALWAYS, mjButtonTexture);
             int flightScenes = KSPApiHelper.GetAppScenesFlight();
             launcherButton = KSPApiHelper.AddModApplication(
                 OnButtonToggle,       // 激活回调（按钮被按下）
@@ -105,16 +134,10 @@ namespace KSPLaunchCountdown
                 iconTexture           // 按钮图标
             );
 
-            Debug.Log($"{LOG_TAG} 工具栏按钮已注册");
-        }
-
-        /// <summary>
-        /// ApplicationLauncher销毁回调
-        /// 在场景切换导致工具栏系统销毁时被调用
-        /// </summary>
-        private void OnLauncherDestroyed()
-        {
-            launcherButton = null;
+            if (launcherButton != null)
+            {
+                Debug.Log($"{LOG_TAG} 工具栏按钮已注册");
+            }
         }
 
         /// <summary>
@@ -242,20 +265,37 @@ namespace KSPLaunchCountdown
 
         /// <summary>
         /// 清理方法，由入口类在OnDestroy中调用
-        /// 移除工具栏按钮和注销事件
+        /// 参考MechJeb的ClearButtons方法：
+        ///   检查按钮的gameObject是否还存在再移除
         /// </summary>
         public void Cleanup()
         {
-            // 移除ApplicationLauncher按钮（通过反射）
+            // 参考MJ: if (mjButton != null && mjButton.gameObject != null)
+            // 通过反射检查按钮的gameObject是否存在
             if (launcherButton != null)
             {
-                KSPApiHelper.RemoveModApplication(launcherButton);
+                bool gameObjectExists = true;
+                try
+                {
+                    var goProp = launcherButton.GetType().GetProperty("gameObject",
+                        System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+                    if (goProp != null)
+                    {
+                        var go = goProp.GetValue(launcherButton);
+                        if (go == null) gameObjectExists = false;
+                    }
+                }
+                catch
+                {
+                    // 无法检查，假设存在
+                }
+
+                if (gameObjectExists)
+                {
+                    KSPApiHelper.RemoveModApplication(launcherButton);
+                }
                 launcherButton = null;
             }
-
-            // 注销GameEvents事件（通过反射）
-            KSPApiHelper.RemoveOnLauncherReadyEvent(OnLauncherReady);
-            KSPApiHelper.RemoveOnLauncherDestroyedEvent(OnLauncherDestroyed);
 
             // 销毁图标纹理
             if (iconTexture != null)

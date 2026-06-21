@@ -100,8 +100,8 @@ namespace KSPLaunchCountdown
                 return;
             }
 
-            // 检查是否在飞行场景
-            if (!KSPApiHelper.IsFlightScene() || FlightGlobals.ActiveVessel == null)
+            // 检查是否在飞行场景（HighLogic在精简DLL中存在，可直接引用）
+            if (!HighLogic.LoadedSceneIsFlight || FlightGlobals.ActiveVessel == null)
             {
                 Debug.LogWarning($"{LOG_TAG} 无法开始倒计时：当前不在飞行场景或无活跃飞船");
                 return;
