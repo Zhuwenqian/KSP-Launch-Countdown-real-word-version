@@ -67,6 +67,11 @@
       <HintPath>..\..\KSP DLL\KSPAssets.dll</HintPath>
       <Private>false</Private>
     </Reference>
+    <!-- ModuleManager: KSP配置节点补丁系统，用于预设配置文件的兼容性 -->
+    <Reference Include="ModuleManager">
+      <HintPath>..\..\KSP DLL\ModuleManager.4.2.3.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
 
     <!-- Unity引擎核心模块 -->
     <Reference Include="UnityEngine">

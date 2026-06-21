@@ -1,31 +1,29 @@
 /**
  * CountdownMenu.cs - KSP1 发射倒计时菜单UI
  *
- * 用途：提供倒计时控制的图形界面，包括预设选择和发射按钮。
+ * 用途：提供倒计时控制的图形界面，包括预设选择、发射按钮和设置选项。
  * 使用Unity IMGUI系统（OnGUI + GUILayout.Window）绘制菜单窗口。
  *
  * 菜单布局：
- *   ┌─────────────────────────┐
- *   │    发射倒计时控制         │
- *   ├─────────────────────────┤
- *   │ 预设: [DFH-1      ▼]   │
- *   │                         │
- *   │     [  Launch  ]        │
- *   │     [  Cancel  ]        │
- *   └─────────────────────────┘
+ *   ┌──────────────────────────────┐
+ *   │      发射倒计时控制            │
+ *   ├──────────────────────────────┤
+ *   │ 预设: [DFH-1           ▼]   │
+ *   │ ☑ 先启动发动机再分离          │
+ *   │                              │
+ *   │      [  Launch  ]            │
+ *   │      [  Cancel  ]            │
+ *   └──────────────────────────────┘
  *
  * 交互流程：
  *   1. 从下拉列表选择预设语音包
- *   2. 点击Launch按钮开始倒计时
- *   3. 倒计时进行中可点击Cancel取消
- *
- * 兼容性说明：
- *   由于精简版Assembly-CSharp.dll中HighLogic.UISkin返回UISkinDef类型，
- *   本类通过KSPApiHelper.GetUISkin()获取GUISkin，确保编译兼容性。
+ *   2. 勾选/取消"先启动发动机再分离"（默认读取预设配置）
+ *   3. 点击Launch按钮开始倒计时
+ *   4. 倒计时进行中可点击Cancel取消
  *
  * 依赖：
- *   - Assembly-CSharp.dll (KSP核心，提供HighLogic.UISkin等)
- *   - UnityEngine.CoreModule.dll (Unity核心，提供OnGUI、GUILayout等)
+ *   - Assembly-CSharp.dll (KSP核心)
+ *   - UnityEngine.CoreModule.dll (Unity核心)
  *   - KSPApiHelper.cs (KSP API反射辅助类)
  */
 
@@ -35,7 +33,7 @@ namespace KSPLaunchCountdown
 {
     /// <summary>
     /// 倒计时菜单UI
-    /// 使用Unity IMGUI绘制控制菜单，提供预设选择和发射控制
+    /// 使用Unity IMGUI绘制控制菜单，提供预设选择、设置和发射控制
     /// </summary>
     public class CountdownMenu : MonoBehaviour
     {
@@ -52,7 +50,7 @@ namespace KSPLaunchCountdown
         private bool isVisible = false;
 
         /// <summary>菜单窗口的位置和大小</summary>
-        private Rect windowRect = new Rect(200f, 200f, 260f, 180f);
+        private Rect windowRect = new Rect(200f, 200f, 280f, 200f);
 
         /// <summary>当前选中的预设索引</summary>
         private int selectedPresetIndex = 0;
@@ -60,8 +58,12 @@ namespace KSPLaunchCountdown
         /// <summary>预设名称数组，用于下拉列表显示</summary>
         private string[] presetNames = new string[0];
 
-        /// <summary>窗口唯一ID，用于GUILayout.Window</summary>
+        /// <summary>窗口唯一ID</summary>
         private readonly int windowId = "KSPLaunchCountdownMenu".GetHashCode();
+
+        /// <summary>是否启用"先启动发动机再分离"
+        /// 切换预设时自动读取该预设的配置值，用户也可手动修改</summary>
+        private bool startEngineBeforeSeparation = false;
 
         /// <summary>
         /// 获取或设置菜单是否可见
@@ -73,34 +75,29 @@ namespace KSPLaunchCountdown
         }
 
         /// <summary>
-        /// 初始化菜单，注入预设管理器和倒计时控制器
+        /// 初始化菜单
         /// </summary>
-        /// <param name="manager">预设管理器实例</param>
-        /// <param name="controller">倒计时控制器实例</param>
         public void Initialize(PresetManager manager, CountdownController controller)
         {
             presetManager = manager;
             countdownController = controller;
 
-            // 加载预设名称列表
             RefreshPresetList();
 
-            // 注册倒计时状态变化事件，倒计时结束时自动关闭菜单
+            // startEngineBeforeSeparation 默认为false，由用户在UI上勾选
+            // 不从预设配置读取，因为此选项取决于当前火箭的分级模式
+
             countdownController.OnCountdownStateChanged += OnCountdownStateChanged;
 
             Debug.Log($"{LOG_TAG} 菜单初始化完成，共 {presetNames.Length} 个预设");
         }
 
-        /// <summary>
-        /// 刷新预设列表
-        /// 从预设管理器重新获取预设名称数组
-        /// </summary>
+        /// <summary>刷新预设列表</summary>
         public void RefreshPresetList()
         {
             if (presetManager != null)
             {
                 presetNames = presetManager.GetPresetNames().ToArray();
-                // 确保选中索引在有效范围内
                 if (selectedPresetIndex >= presetNames.Length)
                 {
                     selectedPresetIndex = 0;
@@ -108,66 +105,64 @@ namespace KSPLaunchCountdown
             }
         }
 
-        /// <summary>
-        /// 倒计时状态变化回调
-        /// 倒计时开始时关闭菜单，倒计时结束或取消时不做特殊处理
-        /// </summary>
-        /// <param name="isRunning">true=倒计时开始，false=倒计时结束或取消</param>
+        /// <summary>倒计时状态变化回调</summary>
         private void OnCountdownStateChanged(bool isRunning)
         {
             if (isRunning)
             {
-                // 倒计时开始时关闭菜单
                 isVisible = false;
             }
         }
 
-        /// <summary>
-        /// Unity IMGUI绘制方法
-        /// 每帧调用多次（布局事件+重绘事件），用于绘制菜单窗口
-        /// </summary>
+        /// <summary>Unity IMGUI绘制</summary>
         void OnGUI()
         {
             if (!isVisible) return;
 
-            // 使用KSP的UI皮肤保持风格一致（通过反射获取）
             GUISkin uiSkin = KSPApiHelper.GetUISkin();
             if (uiSkin != null)
             {
                 GUI.skin = uiSkin;
             }
 
-            // 绘制菜单窗口
             windowRect = GUILayout.Window(windowId, windowRect, DrawWindowContent, "发射倒计时控制");
         }
 
-        /// <summary>
-        /// 绘制菜单窗口内容
-        /// </summary>
-        /// <param name="windowId">窗口ID（由GUILayout.Window传入）</param>
+        /// <summary>绘制菜单窗口内容</summary>
         private void DrawWindowContent(int windowId)
         {
-            // 使用垂直布局
             GUILayout.BeginVertical();
 
             // 预设选择区域
             GUILayout.Label("选择倒计时预设:");
             if (presetNames.Length > 0)
             {
-                // 预设下拉选择
-                selectedPresetIndex = GUILayout.SelectionGrid(
-                    selectedPresetIndex,   // 当前选中索引
-                    presetNames,           // 选项数组
-                    1                      // 每行显示1个选项（垂直排列）
+                int newIndex = GUILayout.SelectionGrid(
+                    selectedPresetIndex,
+                    presetNames,
+                    1
                 );
+
+                // 预设切换时只更新索引，startEngineBeforeSeparation由用户手动控制
+                if (newIndex != selectedPresetIndex)
+                {
+                    selectedPresetIndex = newIndex;
+                }
             }
             else
             {
-                // 无预设可用
                 GUILayout.Label("未找到预设语音包");
             }
 
-            // 间隔
+            GUILayout.Space(5f);
+
+            // "先启动发动机再分离"复选框
+            // 启用后分级操作会执行两次：第一次启动发动机，第二次分离
+            startEngineBeforeSeparation = GUILayout.Toggle(
+                startEngineBeforeSeparation,
+                "先启动发动机再分离"
+            );
+
             GUILayout.Space(10f);
 
             // Launch按钮
@@ -179,7 +174,7 @@ namespace KSPLaunchCountdown
             }
             GUI.enabled = true;
 
-            // Cancel按钮（仅在倒计时进行中可用）
+            // Cancel按钮
             GUI.enabled = countdownController.IsCountingDown;
             if (GUILayout.Button("Cancel", GUILayout.Height(30f)))
             {
@@ -189,14 +184,10 @@ namespace KSPLaunchCountdown
 
             GUILayout.EndVertical();
 
-            // 使窗口可拖拽（必须在所有控件绘制之后调用）
             GUI.DragWindow();
         }
 
-        /// <summary>
-        /// Launch按钮点击处理
-        /// 获取选中的预设，调用倒计时控制器开始倒计时
-        /// </summary>
+        /// <summary>Launch按钮点击处理</summary>
         private void OnLaunchClicked()
         {
             if (presetNames.Length == 0 || selectedPresetIndex >= presetNames.Length)
@@ -205,31 +196,30 @@ namespace KSPLaunchCountdown
                 return;
             }
 
-            string selectedPresetName = presetNames[selectedPresetIndex];
-            string audioPath = presetManager.GetPresetAudioPath(selectedPresetName);
-
-            if (string.IsNullOrEmpty(audioPath))
+            var preset = presetManager.GetPresetByIndex(selectedPresetIndex);
+            if (preset == null)
             {
-                Debug.LogError($"{LOG_TAG} 预设 '{selectedPresetName}' 的音频路径无效");
+                Debug.LogError($"{LOG_TAG} 无法获取预设对象");
                 return;
             }
 
-            Debug.Log($"{LOG_TAG} 选择预设: {selectedPresetName}, 音频路径: {audioPath}");
-            countdownController.StartCountdown(selectedPresetName, audioPath);
+            // 将用户在菜单中的设置覆盖预设配置
+            preset.StartEngineBeforeSeparation = startEngineBeforeSeparation;
+
+            Debug.Log($"{LOG_TAG} 选择预设: {preset.Name}" +
+                $" (模式: {(preset.IsMultiSegment ? "多段" : "单段")}" +
+                $", 先启动发动机: {startEngineBeforeSeparation})");
+
+            countdownController.StartCountdown(preset);
         }
 
-        /// <summary>
-        /// Cancel按钮点击处理
-        /// 取消正在进行的倒计时
-        /// </summary>
+        /// <summary>Cancel按钮点击处理</summary>
         private void OnCancelClicked()
         {
             countdownController.CancelCountdown();
         }
 
-        /// <summary>
-        /// Unity生命周期方法，在对象销毁时清理
-        /// </summary>
+        /// <summary>Unity销毁时清理</summary>
         void OnDestroy()
         {
             if (countdownController != null)
