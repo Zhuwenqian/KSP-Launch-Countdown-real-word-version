@@ -1,6 +1,6 @@
 # KSP Launch Countdown - KSP1 发射倒计时模组
 
-[![KSP Version](https://img.shields.io/badge/KSP-1.x-blue)](https://www.kerbalspaceprogram.com/)
+[![KSP Version](https://img.shields.io/badge/KSP-1.12x-blue)](https://www.kerbalspaceprogram.com/)
 [![.NET Framework](https://img.shields.io/badge/.NET-4.7.2-purple)](https://docs.microsoft.com/en-us/dotnet/framework/)
 [![License](https://img.shields.io/badge/License-GPL%20v3-blue)](./LICENSE)
 
@@ -11,7 +11,7 @@
 ### ✨ 核心特性
 
 - **🎯 专业倒计时流程**：完整的发射倒计时序列，模拟真实航天发射程序
-- **🔊 多语音包支持**：内置多种预设语音包（东风一号、土星五号、神舟系列、星舰），支持自定义扩展
+- **🔊 多语音包支持**：内置多种预设语音包（东方红一号、土星五号、神舟系列、星舰），支持自定义扩展
 - **🎵 双音频模式**：
   - 单段模式：一个音频文件完成整个倒计时
   - 多段模式（p1/p2）：p1播放倒计时，分级后继续播放p2（如"点火"、"升空"语音）
