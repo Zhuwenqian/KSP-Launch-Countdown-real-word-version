@@ -3,7 +3,7 @@
  *
  * 用途：负责加载和播放倒计时语音音频文件。
  * 使用KSP的GameDatabase加载.ogg格式音频，AudioSource组件播放。
- * 支持播放状态检测和播放结束回调，供倒计时控制器使用。
+ * 支持播放状态检测、播放结束回调和实时音量控制，供倒计时控制器使用。
  *
  * 音频加载方式：
  *   使用KSP内置的GameDatabase.GetAudioClip()方法加载音频文件。
@@ -59,6 +59,24 @@ namespace KSPLaunchCountdown
         }
 
         /// <summary>
+        /// 获取或设置倒计时语音音量
+        /// 取值范围 0.0（静音）到 1.0（最大音量）
+        /// 设置后会立即应用到当前正在播放的音频
+        /// </summary>
+        public float Volume
+        {
+            get => audioSource != null ? audioSource.volume : 1.0f;
+            set
+            {
+                float clamped = Mathf.Clamp01(value);
+                if (audioSource != null)
+                {
+                    audioSource.volume = clamped;
+                }
+            }
+        }
+
+        /// <summary>
         /// Unity生命周期方法，在对象创建时初始化AudioSource组件
         /// </summary>
         void Awake()
@@ -68,7 +86,8 @@ namespace KSPLaunchCountdown
             audioSource.spatialBlend = 0f;       // 0=2D音频，1=3D音频；倒计时语音应为2D
             audioSource.loop = false;             // 不循环播放
             audioSource.playOnAwake = false;      // 不自动播放
-            audioSource.volume = 1.0f;            // 音量（0.0~1.0），可调整倒计时语音音量
+            // 默认音量为最大，后续由SettingsManager通过Volume属性覆盖
+            audioSource.volume = 1.0f;
         }
 
         /// <summary>

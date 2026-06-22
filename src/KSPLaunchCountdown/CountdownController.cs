@@ -2,7 +2,8 @@
  * CountdownController.cs - KSP1 发射倒计时控制器
  *
  * 用途：倒计时的核心控制逻辑，协调音频播放和发射序列的执行。
- * 支持单段和多段音频模式，以及"先启动发动机再分离"功能。
+ * 支持单段和多段音频模式、"先启动发动机再分离"功能，
+ * 以及根据发射前安全检查结果的"先点火后放行"策略。
  *
  * 发射流程（单段音频模式）：
  *   1. 隐藏游戏UI
@@ -32,6 +33,8 @@
  *   - Assembly-CSharp.dll (KSP核心)
  *   - UnityEngine.CoreModule.dll (Unity核心)
  *   - KSPApiHelper.cs (KSP API反射辅助类)
+ *   - Localization.cs (多语言支持)
+ *   - LaunchSafetyChecker.cs (发射前安全检查)
  */
 
 using System.Collections;
@@ -61,6 +64,9 @@ namespace KSPLaunchCountdown
         /// <summary>发射序列执行器引用</summary>
         private LaunchSequence launchSequence;
 
+        /// <summary>本地化系统引用</summary>
+        private Localization localization;
+
         /// <summary>当前是否正在执行倒计时序列</summary>
         private bool isCountingDown = false;
 
@@ -69,6 +75,12 @@ namespace KSPLaunchCountdown
 
         /// <summary>UI在倒计时开始前是否已经被隐藏</summary>
         private bool uiWasHiddenBefore = false;
+
+        /// <summary>
+        /// 最近一次安全检查的结果
+        /// 用于在倒计时期间判断是否需要"先点火后放行"策略
+        /// </summary>
+        private SafetyCheckResult lastSafetyCheckResult;
 
         /// <summary>
         /// 倒计时状态变化回调
@@ -80,12 +92,13 @@ namespace KSPLaunchCountdown
         public bool IsCountingDown => isCountingDown;
 
         /// <summary>
-        /// 初始化控制器，注入依赖的音频播放器和发射序列执行器
+        /// 初始化控制器，注入依赖的音频播放器、发射序列执行器和本地化系统
         /// </summary>
-        public void Initialize(AudioPlayer player, LaunchSequence sequence)
+        public void Initialize(AudioPlayer player, LaunchSequence sequence, Localization loc)
         {
             audioPlayer = player;
             launchSequence = sequence;
+            localization = loc;
             audioPlayer.OnAudioFinished += OnAudioPlaybackFinished;
         }
 
@@ -94,7 +107,12 @@ namespace KSPLaunchCountdown
         /// 根据预设的音频模式（单段/多段）和配置执行不同的发射流程
         /// </summary>
         /// <param name="preset">选中的预设对象，包含音频路径和配置</param>
-        public void StartCountdown(CountdownPreset preset)
+        /// <param name="safetyResult">
+        /// 可选的安全检查结果。
+        /// 传入null时会在内部自动执行安全检查；
+        /// 由菜单传入时可直接使用菜单已完成的检查结果。
+        /// </param>
+        public void StartCountdown(CountdownPreset preset, SafetyCheckResult safetyResult = null)
         {
             if (isCountingDown)
             {
@@ -108,12 +126,17 @@ namespace KSPLaunchCountdown
                 return;
             }
 
+            // 如果没有传入安全检查结果，在内部执行一次安全检查
+            lastSafetyCheckResult = safetyResult ?? LaunchSafetyChecker.PerformCheck(
+                FlightGlobals.ActiveVessel, isCountingDown, localization);
+
             isCountingDown = true;
             isCancelled = false;
 
             Debug.Log($"{LOG_TAG} 开始倒计时序列，预设: {preset.Name}" +
                 $" (模式: {(preset.IsMultiSegment ? "多段" : "单段")}" +
-                $", 先启动发动机: {preset.StartEngineBeforeSeparation})");
+                $", 先启动发动机: {preset.StartEngineBeforeSeparation}" +
+                $", 发动机已启动: {lastSafetyCheckResult?.EngineAlreadyRunning})");
 
             OnCountdownStateChanged?.Invoke(true);
 
@@ -148,11 +171,12 @@ namespace KSPLaunchCountdown
 
         /// <summary>
         /// 单段音频倒计时协程
-        /// 流程：隐藏UI → SAS → 满油门 → 播放音频 → 分级 → [第二次分级] → 延迟 → 恢复UI
+        /// 流程：隐藏UI → SAS → [发动机已启动则0油门/否则满油门] → 播放音频 →
+        ///       [若发动机已启动则音频结束后满油门] → 分级 → [第二次分级] → 延迟 → 恢复UI
         /// </summary>
         private IEnumerator SingleSegmentCountdownCoroutine(CountdownPreset preset)
         {
-            // 步骤1-3：隐藏UI、开SAS、满油门
+            // 步骤1-3：隐藏UI、开SAS、设置油门
             yield return StartCoroutine(PreLaunchSequence());
             if (isCancelled) yield break;
 
@@ -167,8 +191,17 @@ namespace KSPLaunchCountdown
             }
             if (isCancelled) yield break;
 
-            // 步骤6：音频播放结束，执行第一次分级
-            Debug.Log($"{LOG_TAG} 倒计时音频播放结束，执行分级");
+            // 步骤6：音频播放结束
+            // 如果发动机已启动（"先点火后放行"策略），此时加满油门
+            if (lastSafetyCheckResult != null && lastSafetyCheckResult.EngineAlreadyRunning)
+            {
+                Debug.Log($"{LOG_TAG} 倒计时音频播放结束，发动机已点火，现在加满油门");
+                launchSequence.SetFullThrottle();
+                yield return null;
+            }
+
+            // 步骤7：执行第一次分级
+            Debug.Log($"{LOG_TAG} 执行分级");
             launchSequence.ActivateNextStage();
 
             // 步骤7：若启用"先启动发动机再分离"，等待延迟后第二次分级
@@ -193,11 +226,13 @@ namespace KSPLaunchCountdown
 
         /// <summary>
         /// 多段音频倒计时协程
-        /// 流程：隐藏UI → SAS → 满油门 → 播放p1 → 分级 → 播放p2 → [第二次分级] → 等待p2结束 → 延迟 → 恢复UI
+        /// 流程：隐藏UI → SAS → [发动机已启动则0油门/否则满油门] → 播放p1 →
+        ///       [若发动机已启动则p1结束后满油门] → 分级 → 播放p2 → [第二次分级] →
+        ///       等待p2结束 → 延迟 → 恢复UI
         /// </summary>
         private IEnumerator MultiSegmentCountdownCoroutine(CountdownPreset preset)
         {
-            // 步骤1-3：隐藏UI、开SAS、满油门
+            // 步骤1-3：隐藏UI、开SAS、设置油门
             yield return StartCoroutine(PreLaunchSequence());
             if (isCancelled) yield break;
 
@@ -213,11 +248,20 @@ namespace KSPLaunchCountdown
             }
             if (isCancelled) yield break;
 
-            // 步骤6：p1播放结束，执行第一次分级
+            // 步骤6：p1播放结束
+            // 如果发动机已启动（"先点火后放行"策略），此时加满油门
+            if (lastSafetyCheckResult != null && lastSafetyCheckResult.EngineAlreadyRunning)
+            {
+                Debug.Log($"{LOG_TAG} p1音频播放结束，发动机已点火，现在加满油门");
+                launchSequence.SetFullThrottle();
+                yield return null;
+            }
+
+            // 步骤7：执行第一次分级
             Debug.Log($"{LOG_TAG} p1音频播放结束，执行分级");
             launchSequence.ActivateNextStage();
 
-            // 步骤7：播放p2音频（点火后部分）
+            // 步骤8：播放p2音频（点火后部分）
             Debug.Log($"{LOG_TAG} 播放p2音频: {preset.AudioFilePath2}");
             audioPlayer.LoadAndPlay(preset.AudioFilePath2);
             yield return null;
@@ -251,8 +295,13 @@ namespace KSPLaunchCountdown
 
         /// <summary>
         /// 发射前准备序列协程
-        /// 隐藏UI → 开SAS → 满油门
+        /// 隐藏UI → 开SAS → 设置油门
         /// 单段和多段模式共用
+        ///
+        /// 油门设置策略：
+        ///   - 正常情况下直接设置满油门
+        ///   - 若芯一级发动机已启动（"先点火后放行"），倒计时期间保持0油门，
+        ///     防止火箭在倒计时语音播放期间提前起飞
         /// </summary>
         private IEnumerator PreLaunchSequence()
         {
@@ -264,7 +313,16 @@ namespace KSPLaunchCountdown
             yield return null;
             if (isCancelled) yield break;
 
-            launchSequence.SetFullThrottle();
+            // 根据安全检查结果决定初始油门
+            if (lastSafetyCheckResult != null && lastSafetyCheckResult.EngineAlreadyRunning)
+            {
+                Debug.Log($"{LOG_TAG} 发动机已启动，倒计时期间保持0油门");
+                launchSequence.SetZeroThrottle();
+            }
+            else
+            {
+                launchSequence.SetFullThrottle();
+            }
             yield return null;
         }
 

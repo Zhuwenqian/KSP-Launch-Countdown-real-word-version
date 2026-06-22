@@ -1,8 +1,9 @@
 /**
  * LaunchSequence.cs - KSP1 发射倒计时发射序列执行器
  *
- * 用途：执行发射操作序列，包括开启SAS、设置满油门、激活下一级（分离+启动发动机）。
+ * 用途：执行发射操作序列，包括开启SAS、设置油门、激活下一级（分离+启动发动机）。
  * 提供独立的发射操作方法，供倒计时控制器按序列调用。
+ * 支持设置任意油门值（0.0~1.0），用于正常发射和"先点火后放行"策略。
  *
  * 操作说明：
  *   - EnableSAS(): 开启SAS稳定模式，防止火箭在发射过程中翻滚
@@ -35,8 +36,14 @@ namespace KSPLaunchCountdown
         /// <summary>日志标签</summary>
         private const string LOG_TAG = "[KSPLaunchCountdown]";
 
-        /// <summary>是否需要持续保持满油门状态</summary>
-        private bool holdFullThrottle = false;
+        /// <summary>是否需要持续保持油门状态</summary>
+        private bool holdThrottle = false;
+
+        /// <summary>
+        /// 当前应保持的油门目标值（0.0~1.0）
+        /// 用于在OnFlyByWire回调中持续保持该油门值
+        /// </summary>
+        private float targetThrottle = 1.0f;
 
         /// <summary>
         /// 开启SAS（稳定性增强系统）
@@ -57,12 +64,12 @@ namespace KSPLaunchCountdown
         }
 
         /// <summary>
-        /// 设置满油门
-        /// 通过FlightInputHandler设置油门值为1.0（满油门），
-        /// 同时注册OnFlyByWire回调持续保持油门状态，
-        /// 防止游戏或其他模组重置油门值
+        /// 设置指定油门值
+        /// 通过FlightInputHandler设置油门值，并通过OnFlyByWire回调持续保持
+        /// 参数范围 0.0（关闭）到 1.0（满油门）
         /// </summary>
-        public void SetFullThrottle()
+        /// <param name="throttle">油门值（0.0~1.0）</param>
+        public void SetThrottle(float throttle)
         {
             Vessel vessel = FlightGlobals.ActiveVessel;
             if (vessel == null)
@@ -71,15 +78,38 @@ namespace KSPLaunchCountdown
                 return;
             }
 
-            // 立即设置满油门（FlightInputHandler在精简DLL中存在，可直接引用）
-            FlightInputHandler.state.mainThrottle = 1.0f;
+            // 限制油门值在合法范围内
+            float clampedThrottle = Mathf.Clamp01(throttle);
 
-            // 注册OnFlyByWire回调，持续保持满油门
+            // 立即设置油门
+            FlightInputHandler.state.mainThrottle = clampedThrottle;
+
+            // 注册OnFlyByWire回调，持续保持油门
             // 原因：FlightInputHandler.state每帧会被重置，
             // 需要在OnFlyByWire回调中持续设置才能保持油门
-            holdFullThrottle = true;
+            holdThrottle = true;
+            targetThrottle = clampedThrottle;
 
-            Debug.Log($"{LOG_TAG} 油门已设置为满");
+            Debug.Log($"{LOG_TAG} 油门已设置为 {clampedThrottle:P0}");
+        }
+
+        /// <summary>
+        /// 设置满油门
+        /// 是SetThrottle(1.0f)的快捷方式
+        /// </summary>
+        public void SetFullThrottle()
+        {
+            SetThrottle(1.0f);
+        }
+
+        /// <summary>
+        /// 设置零油门
+        /// 是SetThrottle(0.0f)的快捷方式
+        /// 用于发动机已启动时倒计时期间保持推力为0
+        /// </summary>
+        public void SetZeroThrottle()
+        {
+            SetThrottle(0.0f);
         }
 
         /// <summary>
@@ -88,7 +118,7 @@ namespace KSPLaunchCountdown
         /// </summary>
         public void ReleaseThrottleHold()
         {
-            holdFullThrottle = false;
+            holdThrottle = false;
             Debug.Log($"{LOG_TAG} 油门保持已释放");
         }
 
@@ -119,9 +149,9 @@ namespace KSPLaunchCountdown
         /// <param name="state">飞行控制状态，包含油门、姿态等输入值</param>
         private void OnFlyByWire(FlightCtrlState state)
         {
-            if (holdFullThrottle)
+            if (holdThrottle)
             {
-                state.mainThrottle = 1.0f;
+                state.mainThrottle = targetThrottle;
             }
         }
 
@@ -133,7 +163,7 @@ namespace KSPLaunchCountdown
         {
             Vessel vessel = FlightGlobals.ActiveVessel;
 
-            if (holdFullThrottle && vessel != null)
+            if (holdThrottle && vessel != null)
             {
                 // 注册OnFlyByWire回调（每帧注册确保不丢失）
                 // 注意：KSP内部可能会清除回调列表，所以需要持续注册
@@ -153,7 +183,7 @@ namespace KSPLaunchCountdown
             {
                 vessel.OnFlyByWire -= OnFlyByWire;
             }
-            holdFullThrottle = false;
+            holdThrottle = false;
         }
     }
 }

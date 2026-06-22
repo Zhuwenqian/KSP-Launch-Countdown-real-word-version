@@ -23,6 +23,9 @@
   - IMGUI风格的控制菜单
   - ApplicationLauncher工具栏集成
   - Ctrl+L快捷键快速切换
+- **🔊 音量控制**：菜单内音量滑块，0%~100% 实时调节并自动保存
+- **🌍 多语言支持**：内置简体中文、英文、俄文界面文本
+- **🛡️ 发射前安全检查**：自动检查发射台状态、倒计时冲突、发动机状态，未通过时提供强制发射选项
 - **📦 易于扩展**：模块化设计，支持添加自定义语音包和配置
 
 ## 🚀 功能演示
@@ -92,6 +95,10 @@ KSP Launch Countdown/
 │   │       ├── Starship-p1.ogg             #    p1: 倒计时部分
 │   │       ├── Starship-p2.ogg             #    p2: 点火后部分
 │   │       └── preset.cfg
+│   ├── Localization/                       # 🌍 多语言文件目录
+│   │   ├── zh-cn.cfg                       #    简体中文
+│   │   ├── en-us.cfg                       #    英文
+│   │   └── ru-ru.cfg                       #    俄文
 │   └── Textures/
 │       └── icon.png                        # 🖼️ 工具栏图标 (38x38)
 │
@@ -160,6 +167,9 @@ KSP Launch Countdown/
 | **AudioPlayer** | `AudioPlayer.cs` | 加载和播放.ogg音频文件，支持异步回调 |
 | **ToolbarButton** | `ToolbarButton.cs` | 管理ApplicationLauncher工具栏按钮 |
 | **KSPApiHelper** | `KSPApiHelper.cs` | 封装KSP API调用，处理反射和兼容性问题 |
+| **SettingsManager** | `SettingsManager.cs` | 管理全局设置（音量）的加载和保存 |
+| **Localization** | `Localization.cs` | 多语言文本加载和翻译 |
+| **LaunchSafetyChecker** | `LaunchSafetyChecker.cs` | 发射前安全检查 |
 
 ## 📦 安装指南
 
@@ -244,9 +254,12 @@ dotnet build -c Release
 4. **配置选项（可选）**
    - ☑️ **先启动发动机再分离**：适用于需要先点火再分离的火箭
      - 启用后会执行两次分级操作，中间有可配置的延迟时间
+   - **音量滑块**：拖动调节倒计时语音音量（0%~100%），设置自动保存到当前存档
 
 5. **开始倒计时**
    - 点击 **Launch** 按钮
+   - 系统会自动执行发射前安全检查
+   - 如果检查未通过（如不在发射台），窗口内会显示警告，勾选"强制发射"后可继续
    - 观看自动执行的发射序列！
 
 6. **取消倒计时（如需要）**
@@ -301,6 +314,12 @@ COUNTDOWN_PRESET
 |------|------|--------|------|
 | `UI_RESTORE_DELAY` | CountdownController.cs | 3.0秒 | 分级后等待恢复UI的延迟时间 |
 | `audioSource.volume` | AudioPlayer.cs | 1.0 | 倒计时语音音量（0.0~1.0） |
+
+### 存档级别参数（saves/<存档名>/KSPLaunchCountdown/Settings.cfg）
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `CountdownVolume` | float | 1.0 | 倒计时语音音量（0.0~1.0） |
 
 ### 预设级别参数（preset.cfg）
 

@@ -7,13 +7,15 @@
  *
  * 功能流程：
  *   1. 在飞行场景加载时启动（KSPAddon.Startup.Flight）
- *   2. 初始化所有子模块：PresetManager、AudioPlayer、LaunchSequence、
- *      CountdownController、CountdownMenu、ToolbarButton
+ *   2. 初始化所有子模块：SettingsManager、Localization、PresetManager、
+ *      AudioPlayer、LaunchSequence、CountdownController、CountdownMenu、ToolbarButton
  *   3. 在场景切换或模组卸载时清理所有资源
  *
  * 依赖：
  *   - Assembly-CSharp.dll (KSP核心，提供KSPAddon、MonoBehaviour、GameEvents等)
  *   - UnityEngine.CoreModule.dll (Unity核心，提供MonoBehaviour基类)
+ *   - SettingsManager.cs (设置管理)
+ *   - Localization.cs (多语言支持)
  *
  * KSP加载机制：
  *   KSP通过 [KSPAddon] 特性自动发现和加载模组类，
@@ -38,6 +40,9 @@ namespace KSPLaunchCountdown
         /// <summary>预设语音包管理器，负责扫描和加载倒计时语音包</summary>
         private PresetManager presetManager;
 
+        /// <summary>本地化系统，负责多语言文本</summary>
+        private Localization localization;
+
         /// <summary>音频播放器，负责加载和播放倒计时语音</summary>
         private AudioPlayer audioPlayer;
 
@@ -52,6 +57,9 @@ namespace KSPLaunchCountdown
 
         /// <summary>工具栏按钮，在KSP ApplicationLauncher上显示模组按钮</summary>
         private ToolbarButton toolbarButton;
+
+        /// <summary>设置管理器，负责全局设置（音量等）的加载和保存</summary>
+        private SettingsManager settingsManager;
 
         /// <summary>
         /// Unity生命周期方法，在对象首次创建时调用（仅一次）
@@ -70,23 +78,33 @@ namespace KSPLaunchCountdown
         {
             Debug.Log("[KSPLaunchCountdown] 模组已启动 - 初始化子模块");
 
+            // 初始化设置管理器（纯逻辑类，从存档配置加载设置）
+            settingsManager = new SettingsManager();
+            settingsManager.Load();
+
+            // 初始化本地化系统（纯逻辑类，加载语言文件）
+            localization = new Localization();
+            localization.Initialize();
+
             // 初始化预设管理器（纯逻辑类，不需要挂载到GameObject）
             presetManager = new PresetManager();
             presetManager.LoadPresets();
 
             // 初始化音频播放器（需要AudioSource组件，挂载到同一GameObject）
             audioPlayer = gameObject.AddComponent<AudioPlayer>();
+            // 应用已保存的音量设置
+            audioPlayer.Volume = settingsManager.CountdownVolume;
 
             // 初始化发射序列执行器（需要访问FlightGlobals，挂载到同一GameObject）
             launchSequence = gameObject.AddComponent<LaunchSequence>();
 
             // 初始化倒计时控制器（协调音频和发射序列，挂载到同一GameObject）
             countdownController = gameObject.AddComponent<CountdownController>();
-            countdownController.Initialize(audioPlayer, launchSequence);
+            countdownController.Initialize(audioPlayer, launchSequence, localization);
 
             // 初始化倒计时菜单UI（需要OnGUI，挂载到同一GameObject）
             countdownMenu = gameObject.AddComponent<CountdownMenu>();
-            countdownMenu.Initialize(presetManager, countdownController);
+            countdownMenu.Initialize(presetManager, countdownController, settingsManager, audioPlayer, localization);
 
             // 初始化工具栏按钮（需要ApplicationLauncher，挂载到同一GameObject）
             toolbarButton = gameObject.AddComponent<ToolbarButton>();

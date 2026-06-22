@@ -10,21 +10,31 @@
  *   ├──────────────────────────────┤
  *   │ 预设: [DFH-1           ▼]   │
  *   │ ☑ 先启动发动机再分离          │
+ *   │ 音量: [──────●────] 50%      │
  *   │                              │
- *   │      [  Launch  ]            │
- *   │      [  Cancel  ]            │
+ *   │ ⚠ 发射前检查未通过            │
+ *   │   • 不在发射台               │
+ *   │   ☑ 强制发射                 │
+ *   │                              │
+ *   │      [  发射  ]              │
+ *   │      [  取消  ]              │
  *   └──────────────────────────────┘
  *
  * 交互流程：
  *   1. 从下拉列表选择预设语音包
- *   2. 勾选/取消"先启动发动机再分离"（默认读取预设配置）
- *   3. 点击Launch按钮开始倒计时
- *   4. 倒计时进行中可点击Cancel取消
+ *   2. 勾选/取消"先启动发动机再分离"
+ *   3. 拖动音量滑块调节倒计时语音音量（0%~100%）
+ *   4. 点击Launch按钮，系统执行发射前安全检查
+ *   5. 检查未通过时显示警告，勾选"强制发射"后可继续
+ *   6. 倒计时进行中可点击Cancel取消
  *
  * 依赖：
  *   - Assembly-CSharp.dll (KSP核心)
  *   - UnityEngine.CoreModule.dll (Unity核心)
  *   - KSPApiHelper.cs (KSP API反射辅助类)
+ *   - Localization.cs (多语言支持)
+ *   - SettingsManager.cs (音量设置持久化)
+ *   - LaunchSafetyChecker.cs (发射前安全检查)
  */
 
 using UnityEngine;
@@ -46,11 +56,20 @@ namespace KSPLaunchCountdown
         /// <summary>倒计时控制器引用</summary>
         private CountdownController countdownController;
 
+        /// <summary>设置管理器引用</summary>
+        private SettingsManager settingsManager;
+
+        /// <summary>音频播放器引用</summary>
+        private AudioPlayer audioPlayer;
+
+        /// <summary>本地化系统引用</summary>
+        private Localization localization;
+
         /// <summary>菜单窗口是否显示</summary>
         private bool isVisible = false;
 
         /// <summary>菜单窗口的位置和大小</summary>
-        private Rect windowRect = new Rect(200f, 200f, 280f, 200f);
+        private Rect windowRect = new Rect(200f, 200f, 300f, 260f);
 
         /// <summary>当前选中的预设索引</summary>
         private int selectedPresetIndex = 0;
@@ -66,6 +85,24 @@ namespace KSPLaunchCountdown
         private bool startEngineBeforeSeparation = false;
 
         /// <summary>
+        /// 最近一次安全检查的结果
+        /// 用于在菜单中显示警告和决定是否允许发射
+        /// </summary>
+        private SafetyCheckResult lastSafetyCheckResult;
+
+        /// <summary>
+        /// 是否显示安全检查警告
+        /// 当上次检查未通过且玩家未勾选强制发射时为true
+        /// </summary>
+        private bool showSafetyWarning = false;
+
+        /// <summary>
+        /// 是否强制发射（跳过安全检查）
+        /// 由玩家在菜单中勾选
+        /// </summary>
+        private bool forceLaunch = false;
+
+        /// <summary>
         /// 获取或设置菜单是否可见
         /// </summary>
         public bool IsVisible
@@ -77,10 +114,18 @@ namespace KSPLaunchCountdown
         /// <summary>
         /// 初始化菜单
         /// </summary>
-        public void Initialize(PresetManager manager, CountdownController controller)
+        /// <param name="manager">预设管理器</param>
+        /// <param name="controller">倒计时控制器</param>
+        /// <param name="settings">设置管理器</param>
+        /// <param name="player">音频播放器</param>
+        /// <param name="loc">本地化系统</param>
+        public void Initialize(PresetManager manager, CountdownController controller, SettingsManager settings, AudioPlayer player, Localization loc)
         {
             presetManager = manager;
             countdownController = controller;
+            settingsManager = settings;
+            audioPlayer = player;
+            localization = loc;
 
             RefreshPresetList();
 
@@ -125,7 +170,11 @@ namespace KSPLaunchCountdown
                 GUI.skin = uiSkin;
             }
 
-            windowRect = GUILayout.Window(windowId, windowRect, DrawWindowContent, "发射倒计时控制");
+            windowRect = GUILayout.Window(
+                windowId,
+                windowRect,
+                DrawWindowContent,
+                localization.GetString(Localization.Keys.WindowTitle));
         }
 
         /// <summary>绘制菜单窗口内容</summary>
@@ -134,7 +183,7 @@ namespace KSPLaunchCountdown
             GUILayout.BeginVertical();
 
             // 预设选择区域
-            GUILayout.Label("选择倒计时预设:");
+            GUILayout.Label(localization.GetString(Localization.Keys.SelectPreset));
             if (presetNames.Length > 0)
             {
                 int newIndex = GUILayout.SelectionGrid(
@@ -151,7 +200,7 @@ namespace KSPLaunchCountdown
             }
             else
             {
-                GUILayout.Label("未找到预设语音包");
+                GUILayout.Label(localization.GetString(Localization.Keys.NoPresetsFound));
             }
 
             GUILayout.Space(5f);
@@ -160,15 +209,32 @@ namespace KSPLaunchCountdown
             // 启用后分级操作会执行两次：第一次启动发动机，第二次分离
             startEngineBeforeSeparation = GUILayout.Toggle(
                 startEngineBeforeSeparation,
-                "先启动发动机再分离"
+                localization.GetString(Localization.Keys.StartEngineBeforeSeparation)
             );
+
+            GUILayout.Space(5f);
+
+            // 音量控制滑块
+            // 音量范围 0%~100%，对应 AudioPlayer.Volume 的 0.0~1.0
+            DrawVolumeSlider();
+
+            GUILayout.Space(5f);
+
+            // 安全检查警告区域
+            // 当上次安全检查未通过时显示失败原因和强制发射选项
+            DrawSafetyWarning();
 
             GUILayout.Space(10f);
 
             // Launch按钮
-            bool canLaunch = presetNames.Length > 0 && !countdownController.IsCountingDown;
+            // 只有在以下情况可用：
+            // 1. 有可用预设
+            // 2. 没有正在进行的倒计时
+            // 3. 安全检查通过，或玩家勾选了强制发射
+            bool safetyOk = lastSafetyCheckResult == null || lastSafetyCheckResult.IsSafe || forceLaunch;
+            bool canLaunch = presetNames.Length > 0 && !countdownController.IsCountingDown && safetyOk;
             GUI.enabled = canLaunch;
-            if (GUILayout.Button("Launch", GUILayout.Height(30f)))
+            if (GUILayout.Button(localization.GetString(Localization.Keys.LaunchButton), GUILayout.Height(30f)))
             {
                 OnLaunchClicked();
             }
@@ -176,7 +242,7 @@ namespace KSPLaunchCountdown
 
             // Cancel按钮
             GUI.enabled = countdownController.IsCountingDown;
-            if (GUILayout.Button("Cancel", GUILayout.Height(30f)))
+            if (GUILayout.Button(localization.GetString(Localization.Keys.CancelButton), GUILayout.Height(30f)))
             {
                 OnCancelClicked();
             }
@@ -185,6 +251,72 @@ namespace KSPLaunchCountdown
             GUILayout.EndVertical();
 
             GUI.DragWindow();
+        }
+
+        /// <summary>
+        /// 绘制音量控制滑块
+        /// 实时更新AudioPlayer音量和SettingsManager持久化设置
+        /// </summary>
+        private void DrawVolumeSlider()
+        {
+            if (settingsManager == null) return;
+
+            // 当前音量百分比（0~100）
+            int volumePercent = Mathf.RoundToInt(settingsManager.CountdownVolume * 100f);
+
+            GUILayout.BeginHorizontal();
+            GUILayout.Label(localization.GetString(Localization.Keys.VolumeLabel, volumePercent), GUILayout.Width(80f));
+
+            // 滑块范围 0.0~1.0
+            float newVolume = GUILayout.HorizontalSlider(
+                settingsManager.CountdownVolume,
+                0.0f,
+                1.0f
+            );
+            GUILayout.EndHorizontal();
+
+            // 只在音量变化时更新（避免每帧重复保存）
+            if (Mathf.Abs(newVolume - settingsManager.CountdownVolume) > 0.001f)
+            {
+                settingsManager.CountdownVolume = newVolume;
+
+                // 同步更新当前AudioPlayer的音量
+                // 即使音频正在播放也会立即生效
+                if (audioPlayer != null)
+                {
+                    audioPlayer.Volume = newVolume;
+                }
+            }
+        }
+
+        /// <summary>
+        /// 绘制安全检查警告区域
+        /// 当安全检查未通过时显示失败原因列表和"强制发射"复选框
+        /// </summary>
+        private void DrawSafetyWarning()
+        {
+            if (!showSafetyWarning || lastSafetyCheckResult == null || lastSafetyCheckResult.IsSafe)
+            {
+                return;
+            }
+
+            // 使用醒目的颜色显示警告标题
+            GUIStyle warningStyle = new GUIStyle(GUI.skin.label);
+            warningStyle.normal.textColor = Color.yellow;
+            warningStyle.fontStyle = FontStyle.Bold;
+            GUILayout.Label(localization.GetString(Localization.Keys.SafetyCheckFailedTitle), warningStyle);
+
+            // 列出所有失败原因
+            foreach (string reason in lastSafetyCheckResult.FailureReasons)
+            {
+                GUILayout.Label("• " + reason);
+            }
+
+            // 强制发射复选框
+            forceLaunch = GUILayout.Toggle(
+                forceLaunch,
+                localization.GetString(Localization.Keys.ForceLaunchButton)
+            );
         }
 
         /// <summary>Launch按钮点击处理</summary>
@@ -206,11 +338,34 @@ namespace KSPLaunchCountdown
             // 将用户在菜单中的设置覆盖预设配置
             preset.StartEngineBeforeSeparation = startEngineBeforeSeparation;
 
+            // 执行发射前安全检查
+            // 如果玩家勾选了强制发射，跳过安全检查直接启动
+            SafetyCheckResult safetyResult = null;
+            if (!forceLaunch)
+            {
+                safetyResult = LaunchSafetyChecker.PerformCheck(
+                    FlightGlobals.ActiveVessel, countdownController.IsCountingDown, localization);
+            }
+            else
+            {
+                Debug.Log($"{LOG_TAG} 玩家选择强制发射，跳过安全检查");
+            }
+
+            lastSafetyCheckResult = safetyResult;
+            showSafetyWarning = safetyResult != null && !safetyResult.IsSafe;
+
+            // 如果检查未通过且没有勾选强制发射，不启动倒计时
+            if (safetyResult != null && !safetyResult.IsSafe && !forceLaunch)
+            {
+                Debug.LogWarning($"{LOG_TAG} 发射前安全检查未通过，等待玩家确认");
+                return;
+            }
+
             Debug.Log($"{LOG_TAG} 选择预设: {preset.Name}" +
                 $" (模式: {(preset.IsMultiSegment ? "多段" : "单段")}" +
                 $", 先启动发动机: {startEngineBeforeSeparation})");
 
-            countdownController.StartCountdown(preset);
+            countdownController.StartCountdown(preset, safetyResult);
         }
 
         /// <summary>Cancel按钮点击处理</summary>
