@@ -32,14 +32,14 @@
  *   - 所有路径采用相对路径，兼容 Windows/Linux/Docker
  *
  * 依赖：
- *   - Assembly-CSharp.dll (KSP核心，提供KSPUtil、ConfigNode、Localizer)
+ *   - Assembly-CSharp.dll (KSP核心，提供KSPUtil、ConfigNode、KSP.Localization.Localizer)
  *   - UnityEngine.CoreModule.dll (Unity核心，提供Debug日志)
  */
 
 using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
-using KSP;
+using KSP.Localization;
 
 namespace KSPLaunchCountdown
 {
@@ -87,6 +87,7 @@ namespace KSPLaunchCountdown
             public const string SafetyCheckNotOnLaunchPad = "#KSPLaunchCountdown_SafetyCheckNotOnLaunchPad";
             public const string SafetyCheckAlreadyCountingDown = "#KSPLaunchCountdown_SafetyCheckAlreadyCountingDown";
             public const string SafetyCheckEngineAlreadyRunning = "#KSPLaunchCountdown_SafetyCheckEngineAlreadyRunning";
+            public const string SafetyCheckLowElectricCharge = "#KSPLaunchCountdown_SafetyCheckLowElectricCharge";
             public const string ForceLaunchButton = "#KSPLaunchCountdown_ForceLaunchButton";
             public const string AbortLaunchButton = "#KSPLaunchCountdown_AbortLaunchButton";
         }
@@ -107,26 +108,18 @@ namespace KSPLaunchCountdown
         /// <summary>
         /// 获取当前KSP语言代码
         /// KSP的Localizer.CurrentLanguage返回类似"zh-cn"、"en-us"的代码
+        /// 添加 using KSP.Localization; 后即可直接访问 Localizer 类型
         /// </summary>
         private string GetCurrentLanguage()
         {
             try
             {
-                // 通过反射访问 KSP.Localization.Localizer.CurrentLanguage
-                // 因为精简版DLL可能不包含 Localizer 类型
-                var localizerType = System.Type.GetType("KSP.Localization.Localizer, Assembly-CSharp");
-                if (localizerType != null)
+                // 直接访问KSP的Localizer获取当前语言
+                // Localizer位于KSP.Localization命名空间下（需添加 using KSP.Localization;）
+                string lang = Localizer.CurrentLanguage;
+                if (!string.IsNullOrEmpty(lang))
                 {
-                    var currentLanguageProperty = localizerType.GetProperty("currentLanguage",
-                        System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
-                    if (currentLanguageProperty != null)
-                    {
-                        string lang = currentLanguageProperty.GetValue(null) as string;
-                        if (!string.IsNullOrEmpty(lang))
-                        {
-                            return lang.ToLowerInvariant();
-                        }
-                    }
+                    return lang.ToLowerInvariant();
                 }
             }
             catch (System.Exception ex)

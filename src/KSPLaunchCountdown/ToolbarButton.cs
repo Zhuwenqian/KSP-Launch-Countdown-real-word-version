@@ -26,6 +26,8 @@
  *   图标文件为 GameData/KSPLaunchCountdown/Textures/icon.png（38x38 像素）
  *   通过 GameDatabase.Instance.GetTexture 加载，路径格式为 "KSPLaunchCountdown/Textures/icon"
  *   （不含扩展名和 GameData 前缀）
+ *   场景切换后 GameDatabase 可能需要几帧才能就绪，因此图标加载失败时会自动重试，
+ *   不会立即终止按钮注册流程。
  *
  * 依赖：
  *   - Assembly-CSharp.dll (KSP 核心，提供 KSP.UI.Screens.ApplicationLauncher)
@@ -103,6 +105,9 @@ namespace KSPLaunchCountdown
         /// 设置 ApplicationLauncher 按钮
         /// 参考示例代码：先检查 ApplicationLauncher.Instance != null，
         /// 再调用 AddModApplication 注册按钮。
+        /// 
+        /// 注意：图标加载失败时不视为致命错误，因为 GameDatabase 可能尚未就绪。
+        /// 返回后会在下一帧 Update 中再次尝试，直到加载成功或按钮注册完成。
         /// </summary>
         private void SetupAppLauncher()
         {
@@ -112,7 +117,7 @@ namespace KSPLaunchCountdown
                 return;
             }
 
-            // 加载图标纹理
+            // 加载图标纹理（GameDatabase 未就绪时会返回 null，下帧重试）
             if (iconTexture == null)
             {
                 iconTexture = LoadIconTexture();
@@ -149,9 +154,19 @@ namespace KSPLaunchCountdown
         /// <summary>
         /// 从 GameDatabase 加载图标纹理
         /// 路径格式：模组名/目录/文件名（不含扩展名和 GameData 前缀）
+        /// 
+        /// 注意：GameDatabase 在场景切换后可能需要几帧才能完全加载资源。
+        /// 如果此时 GameDatabase 未就绪或纹理未加载完成，返回 null，由调用方在后续帧重试。
         /// </summary>
         private Texture2D LoadIconTexture()
         {
+            // 检查 GameDatabase 是否已初始化
+            if (GameDatabase.Instance == null)
+            {
+                Debug.LogWarning($"{LOG_TAG} GameDatabase 尚未初始化，图标 {ICON_DB_PATH} 加载将稍后重试");
+                return null;
+            }
+
             Texture2D tex = GameDatabase.Instance.GetTexture(ICON_DB_PATH, false);
             if (tex != null)
             {
@@ -159,7 +174,8 @@ namespace KSPLaunchCountdown
             }
             else
             {
-                Debug.LogError($"{LOG_TAG} 图标加载失败: {ICON_DB_PATH}。请确认 icon.png 已放入 GameData/KSPLaunchCountdown/Textures/ 目录");
+                // 使用 Warning 而非 Error，因为资源可能尚未加载完成，下帧会重试
+                Debug.LogWarning($"{LOG_TAG} 图标加载失败: {ICON_DB_PATH}。可能 GameDatabase 尚未就绪或 icon.png 未放入 GameData/KSPLaunchCountdown/Textures/ 目录，将在下一帧重试");
             }
             return tex;
         }
@@ -193,6 +209,9 @@ namespace KSPLaunchCountdown
         /// <summary>
         /// 清理方法，由入口类在 OnDestroy 中调用
         /// 参考示例：检查按钮实例不为空后，调用 RemoveModApplication 移除按钮
+        /// 
+        /// 注意：图标纹理由 GameDatabase 加载和管理，不在这里主动 Destroy，
+        /// 避免破坏 GameDatabase 的内部引用或导致后续场景加载时返回 null。
         /// </summary>
         public void Cleanup()
         {
@@ -205,12 +224,9 @@ namespace KSPLaunchCountdown
                 launcherButton = null;
             }
 
-            // 销毁图标纹理
-            if (iconTexture != null)
-            {
-                Destroy(iconTexture);
-                iconTexture = null;
-            }
+            // 图标纹理由 GameDatabase 管理，不主动销毁
+            // 仅清空本地引用，让 GC 在新场景加载后自然回收
+            iconTexture = null;
 
             Debug.Log($"{LOG_TAG} 工具栏按钮已清理");
         }

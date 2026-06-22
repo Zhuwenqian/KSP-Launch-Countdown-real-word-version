@@ -24,9 +24,14 @@
  *   1. 从下拉列表选择预设语音包
  *   2. 勾选/取消"先启动发动机再分离"
  *   3. 拖动音量滑块调节倒计时语音音量（0%~100%）
- *   4. 点击Launch按钮，系统执行发射前安全检查
- *   5. 检查未通过时显示警告，勾选"强制发射"后可继续
+ *   4. 点击Launch按钮，系统执行发射前安全检查（包含电量、发射台、倒计时冲突、发动机状态）
+ *   5. 如果检查未通过（如不在发射台、电量不足），窗口内会显示黄色警告，勾选"强制发射"后可继续
  *   6. 倒计时进行中可点击Cancel取消
+ *   7. 观看自动执行的发射序列！
+ *
+ * 安全检查UI：
+ *   - 主动点击Launch时执行检查并显示结果
+ *   - 订阅CountdownController.OnSafetyCheckFailed事件，确保任何路径的检查失败都会显示警告
  *
  * 依赖：
  *   - Assembly-CSharp.dll (KSP核心)
@@ -133,6 +138,7 @@ namespace KSPLaunchCountdown
             // 不从预设配置读取，因为此选项取决于当前火箭的分级模式
 
             countdownController.OnCountdownStateChanged += OnCountdownStateChanged;
+            countdownController.OnSafetyCheckFailed += OnSafetyCheckFailed;
 
             Debug.Log($"{LOG_TAG} 菜单初始化完成，共 {presetNames.Length} 个预设");
         }
@@ -150,13 +156,38 @@ namespace KSPLaunchCountdown
             }
         }
 
-        /// <summary>倒计时状态变化回调</summary>
-        private void OnCountdownStateChanged(bool isRunning)
+        /// <summary>
+        /// 倒计时状态变化回调
+        /// 倒计时结束时隐藏菜单或重置UI状态
+        /// </summary>
+        /// <param name="started">true=倒计时开始，false=倒计时结束</param>
+        private void OnCountdownStateChanged(bool started)
         {
-            if (isRunning)
+            if (started)
             {
                 isVisible = false;
             }
+            else
+            {
+                // 倒计时结束（正常完成或取消）时，重置强制发射状态
+                forceLaunch = false;
+                showSafetyWarning = false;
+            }
+        }
+
+        /// <summary>
+        /// 安全检查失败回调
+        /// 当CountdownController内部安全检查未通过时调用
+        /// 在菜单中显示警告并允许玩家选择强制发射
+        /// </summary>
+        /// <param name="result">安全检查结果</param>
+        private void OnSafetyCheckFailed(SafetyCheckResult result)
+        {
+            lastSafetyCheckResult = result;
+            showSafetyWarning = result != null && !result.IsSafe;
+            forceLaunch = false;
+
+            Debug.LogWarning($"{LOG_TAG} 菜单收到安全检查失败通知，显示警告");
         }
 
         /// <summary>Unity IMGUI绘制</summary>
@@ -380,6 +411,7 @@ namespace KSPLaunchCountdown
             if (countdownController != null)
             {
                 countdownController.OnCountdownStateChanged -= OnCountdownStateChanged;
+                countdownController.OnSafetyCheckFailed -= OnSafetyCheckFailed;
             }
         }
     }

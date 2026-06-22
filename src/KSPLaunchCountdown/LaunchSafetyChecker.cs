@@ -5,19 +5,22 @@
  * 检查项包括：
  *   1. 是否在发射台（地面高度 < 100m 且速度接近0）
  *   2. 是否已有正在进行的倒计时
- *   3. 芯一级发动机是否已启动
+ *   3. 飞船电量是否充足（当前电量 < 总电量 1/20 时拒绝发射）
+ *   4. 芯一级发动机是否已启动
  *
  * 对于发动机已启动的情况，模组采用"先点火后放行"策略：
  *   - 倒计时期间保持油门为0
- *   - 倒计时音频播放结束后才加满油门并执行分级
+ *   - 倒计时音频播放结束后只加满油门，不执行自动分级
+ *   - 由玩家手动控制后续分级操作
  *
  * 设计说明：
  *   - 所有阈值参数在类内集中定义，便于统一调整
  *   - 检查结果以对象形式返回，包含是否通过、失败原因和特殊状态标志
- *   - 检查失败时可通过 PopupDialog 向玩家展示原因，并提供"强制发射"选项
+ *   - 记录 LowElectricCharge 标志，供 CountdownController 在 SAS 开启失败时区分 MJ 控制和停电
+ *   - 检查失败时由 CountdownMenu 在窗口内显示警告和"强制发射"复选框
  *
  * 依赖：
- *   - Assembly-CSharp.dll (KSP核心，提供Vessel、PopupDialog等)
+ *   - Assembly-CSharp.dll (KSP核心，提供Vessel、PartResource等)
  *   - UnityEngine.CoreModule.dll (Unity核心，提供Vector3、Debug等)
  */
 
@@ -43,6 +46,12 @@ namespace KSPLaunchCountdown
         /// 如果为true，倒计时期间应保持油门为0，音频结束后再加满油门
         /// </summary>
         public bool EngineAlreadyRunning { get; set; } = false;
+
+        /// <summary>
+        /// 是否电量不足（低于总电量的1/20）
+        /// 用于SAS开启失败时区分MJ控制和停电
+        /// </summary>
+        public bool LowElectricCharge { get; set; } = false;
 
         /// <summary>添加失败原因</summary>
         public void AddFailure(string reason)
@@ -72,6 +81,13 @@ namespace KSPLaunchCountdown
         /// 可调整参数：增大此值允许在微动状态下启动倒计时
         /// </summary>
         private const float MAX_LAUNCHPAD_VELOCITY = 0.5f;
+
+        /// <summary>
+        /// 电量不足阈值（占总电量的比例）
+        /// 默认 1/20 = 0.05，即电量低于5%时拒绝发射
+        /// 可调整参数：增大此值会让发射前电量要求更严格
+        /// </summary>
+        private const float LOW_ELECTRIC_CHARGE_RATIO = 0.05f;
 
         /// <summary>
         /// 执行发射前安全检查
@@ -111,7 +127,16 @@ namespace KSPLaunchCountdown
                 Debug.LogWarning($"{LOG_TAG} 安全检查失败：高度={altitude:F1}m, 速度={velocity:F1}m/s");
             }
 
-            // 检查3：芯一级发动机是否已启动
+            // 检查3：飞船电量是否充足
+            // 当前电量小于总电量的1/20时拒绝发射
+            if (!HasEnoughElectricCharge(vessel))
+            {
+                result.LowElectricCharge = true;
+                result.AddFailure(localization.GetString(Localization.Keys.SafetyCheckLowElectricCharge));
+                Debug.LogWarning($"{LOG_TAG} 安全检查失败：飞船电量不足");
+            }
+
+            // 检查4：芯一级发动机是否已启动
             // 通过检查所有ModuleEngines的当前推力来判断
             // 如果任意发动机正在产生推力，则认为发动机已启动
             result.EngineAlreadyRunning = IsAnyEngineRunning(vessel);
@@ -123,6 +148,46 @@ namespace KSPLaunchCountdown
             }
 
             return result;
+        }
+
+        /// <summary>
+        /// 检查飞船电量是否充足
+        /// 当前电量小于总电量的1/20时返回false
+        /// </summary>
+        /// <param name="vessel">当前活跃飞船</param>
+        /// <returns>电量是否充足</returns>
+        private static bool HasEnoughElectricCharge(Vessel vessel)
+        {
+            if (vessel == null) return false;
+
+            double currentCharge = 0.0;
+            double maxCharge = 0.0;
+
+            // 遍历所有部件，累加 ElectricCharge 资源的当前值和最大值
+            foreach (Part part in vessel.Parts)
+            {
+                if (part.Resources == null) continue;
+
+                foreach (PartResource resource in part.Resources)
+                {
+                    if (resource.resourceName == "ElectricCharge")
+                    {
+                        currentCharge += resource.amount;
+                        maxCharge += resource.maxAmount;
+                    }
+                }
+            }
+
+            // 没有电池/太阳能板时 maxCharge 为0，此时跳过电量检查
+            if (maxCharge <= 0.0)
+            {
+                return true;
+            }
+
+            double ratio = currentCharge / maxCharge;
+            Debug.Log($"{LOG_TAG} 飞船电量: {currentCharge:F1}/{maxCharge:F1} ({ratio:P0})");
+
+            return ratio >= LOW_ELECTRIC_CHARGE_RATIO;
         }
 
         /// <summary>

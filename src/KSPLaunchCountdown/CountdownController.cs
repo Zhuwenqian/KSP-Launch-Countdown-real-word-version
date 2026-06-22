@@ -2,12 +2,13 @@
  * CountdownController.cs - KSP1 发射倒计时控制器
  *
  * 用途：倒计时的核心控制逻辑，协调音频播放和发射序列的执行。
- * 支持单段和多段音频模式、"先启动发动机再分离"功能，
- * 以及根据发射前安全检查结果的"先点火后放行"策略。
+ * 支持单段和多段音频模式、"先启动发动机再分离"功能、
+ * 根据发射前安全检查结果的"先点火后放行"策略，
+ * 以及发射前SAS开启的多次尝试和异常处理。
  *
- * 发射流程（单段音频模式）：
+ * 发射流程（单段音频模式，发动机未启动）：
  *   1. 隐藏游戏UI
- *   2. 开启SAS
+ *   2. 开启SAS（最多尝试3次）
  *   3. 设置满油门
  *   4. 播放倒计时音频
  *   5. 等待音频播放结束
@@ -16,9 +17,19 @@
  *   8. 等待3秒
  *   9. 恢复游戏UI
  *
- * 发射流程（多段音频模式 p1/p2）：
+ * 发射流程（单段/多段音频模式，发动机已启动）：
  *   1. 隐藏游戏UI
- *   2. 开启SAS
+ *   2. 开启SAS（最多尝试3次）
+ *   3. 设置0油门（倒计时期间保持推力为0）
+ *   4. 播放倒计时音频
+ *   5. 等待音频播放结束
+ *   6. 只加满油门，不执行自动分级
+ *   7. 等待3秒
+ *   8. 恢复游戏UI
+ *
+ * 发射流程（多段音频模式 p1/p2，发动机未启动）：
+ *   1. 隐藏游戏UI
+ *   2. 开启SAS（最多尝试3次）
  *   3. 设置满油门
  *   4. 播放p1音频（倒计时部分）
  *   5. 等待p1播放结束
@@ -28,6 +39,11 @@
  *   9. 等待p2播放结束
  *   10. 等待3秒
  *   11. 恢复游戏UI
+ *
+ * SAS异常处理：
+ *   - SAS开启后会检查3次状态
+ *   - 3次后仍失败且电量正常：判断为MJ控制，继续正常执行分级
+ *   - 3次后仍失败且电量低：判断为停电，中止发射序列
  *
  * 依赖：
  *   - Assembly-CSharp.dll (KSP核心)
@@ -88,6 +104,13 @@ namespace KSPLaunchCountdown
         /// </summary>
         public event System.Action<bool> OnCountdownStateChanged;
 
+        /// <summary>
+        /// 安全检查失败回调
+        /// 当CountdownController内部执行安全检查未通过时触发
+        /// 用于通知菜单显示警告信息
+        /// </summary>
+        public event System.Action<SafetyCheckResult> OnSafetyCheckFailed;
+
         /// <summary>获取当前是否正在执行倒计时</summary>
         public bool IsCountingDown => isCountingDown;
 
@@ -127,8 +150,23 @@ namespace KSPLaunchCountdown
             }
 
             // 如果没有传入安全检查结果，在内部执行一次安全检查
-            lastSafetyCheckResult = safetyResult ?? LaunchSafetyChecker.PerformCheck(
-                FlightGlobals.ActiveVessel, isCountingDown, localization);
+            if (safetyResult == null)
+            {
+                lastSafetyCheckResult = LaunchSafetyChecker.PerformCheck(
+                    FlightGlobals.ActiveVessel, isCountingDown, localization);
+
+                // 内部安全检查未通过时，触发事件通知UI显示，不启动倒计时
+                if (!lastSafetyCheckResult.IsSafe)
+                {
+                    Debug.LogWarning($"{LOG_TAG} 内部安全检查未通过，通知UI显示警告");
+                    OnSafetyCheckFailed?.Invoke(lastSafetyCheckResult);
+                    return;
+                }
+            }
+            else
+            {
+                lastSafetyCheckResult = safetyResult;
+            }
 
             isCountingDown = true;
             isCancelled = false;
@@ -172,7 +210,7 @@ namespace KSPLaunchCountdown
         /// <summary>
         /// 单段音频倒计时协程
         /// 流程：隐藏UI → SAS → [发动机已启动则0油门/否则满油门] → 播放音频 →
-        ///       [若发动机已启动则音频结束后满油门] → 分级 → [第二次分级] → 延迟 → 恢复UI
+        ///       [若发动机已启动则只加满油门；否则分级 → 可选第二次分级] → 延迟 → 恢复UI
         /// </summary>
         private IEnumerator SingleSegmentCountdownCoroutine(CountdownPreset preset)
         {
@@ -191,43 +229,47 @@ namespace KSPLaunchCountdown
             }
             if (isCancelled) yield break;
 
-            // 步骤6：音频播放结束
-            // 如果发动机已启动（"先点火后放行"策略），此时加满油门
+            // 步骤6：音频播放结束后的处理
             if (lastSafetyCheckResult != null && lastSafetyCheckResult.EngineAlreadyRunning)
             {
-                Debug.Log($"{LOG_TAG} 倒计时音频播放结束，发动机已点火，现在加满油门");
+                // 发动机已启动时：只加满油门，不执行自动分级
+                // 由玩家手动控制后续分级操作
+                Debug.Log($"{LOG_TAG} 倒计时音频播放结束，发动机已点火，现在加满油门（不自动分级）");
                 launchSequence.SetFullThrottle();
                 yield return null;
             }
-
-            // 步骤7：执行第一次分级
-            Debug.Log($"{LOG_TAG} 执行分级");
-            launchSequence.ActivateNextStage();
-
-            // 步骤7：若启用"先启动发动机再分离"，等待延迟后第二次分级
-            if (preset.StartEngineBeforeSeparation)
+            else
             {
-                Debug.Log($"{LOG_TAG} 等待 {preset.SingleStageDelay} 秒后执行第二次分级");
-                float elapsed = 0f;
-                while (elapsed < preset.SingleStageDelay && !isCancelled)
-                {
-                    elapsed += UnityEngine.Time.deltaTime;
-                    yield return null;
-                }
-                if (isCancelled) yield break;
-
+                // 正常流程：执行第一次分级
+                Debug.Log($"{LOG_TAG} 执行分级");
                 launchSequence.ActivateNextStage();
-                Debug.Log($"{LOG_TAG} 第二次分级完成");
+
+                // 步骤7：若启用"先启动发动机再分离"，等待延迟后第二次分级
+                if (preset.StartEngineBeforeSeparation)
+                {
+                    Debug.Log($"{LOG_TAG} 等待 {preset.SingleStageDelay} 秒后执行第二次分级");
+                    float elapsed = 0f;
+                    while (elapsed < preset.SingleStageDelay && !isCancelled)
+                    {
+                        elapsed += UnityEngine.Time.deltaTime;
+                        yield return null;
+                    }
+                    if (isCancelled) yield break;
+
+                    launchSequence.ActivateNextStage();
+                    Debug.Log($"{LOG_TAG} 第二次分级完成");
+                }
             }
 
-            // 步骤8：等待后恢复UI
+            // 步骤8-9：等待后恢复UI
             yield return StartCoroutine(WaitAndRestoreUI());
         }
 
         /// <summary>
         /// 多段音频倒计时协程
         /// 流程：隐藏UI → SAS → [发动机已启动则0油门/否则满油门] → 播放p1 →
-        ///       [若发动机已启动则p1结束后满油门] → 分级 → 播放p2 → [第二次分级] →
+        ///       [若发动机已启动则p1结束后只加满油门；否则分级] → 播放p2 →
+        ///       [若发动机未启动且启用先启动发动机再分离则第二次分级] →
         ///       等待p2结束 → 延迟 → 恢复UI
         /// </summary>
         private IEnumerator MultiSegmentCountdownCoroutine(CountdownPreset preset)
@@ -248,26 +290,30 @@ namespace KSPLaunchCountdown
             }
             if (isCancelled) yield break;
 
-            // 步骤6：p1播放结束
-            // 如果发动机已启动（"先点火后放行"策略），此时加满油门
+            // 步骤6：p1播放结束后的处理
             if (lastSafetyCheckResult != null && lastSafetyCheckResult.EngineAlreadyRunning)
             {
-                Debug.Log($"{LOG_TAG} p1音频播放结束，发动机已点火，现在加满油门");
+                // 发动机已启动时：只加满油门，不执行自动分级，然后继续播放p2
+                Debug.Log($"{LOG_TAG} p1音频播放结束，发动机已点火，现在加满油门（不自动分级）");
                 launchSequence.SetFullThrottle();
                 yield return null;
             }
+            else
+            {
+                // 正常流程：执行第一次分级
+                Debug.Log($"{LOG_TAG} p1音频播放结束，执行分级");
+                launchSequence.ActivateNextStage();
+            }
 
-            // 步骤7：执行第一次分级
-            Debug.Log($"{LOG_TAG} p1音频播放结束，执行分级");
-            launchSequence.ActivateNextStage();
-
-            // 步骤8：播放p2音频（点火后部分）
+            // 步骤7：播放p2音频（点火后部分）
             Debug.Log($"{LOG_TAG} 播放p2音频: {preset.AudioFilePath2}");
             audioPlayer.LoadAndPlay(preset.AudioFilePath2);
             yield return null;
 
-            // 步骤8：若启用"先启动发动机再分离"，p2开始后等待延迟执行第二次分级
-            if (preset.StartEngineBeforeSeparation)
+            // 步骤8：若发动机未启动且启用"先启动发动机再分离"，
+            // p2开始后等待延迟执行第二次分级
+            if (!(lastSafetyCheckResult != null && lastSafetyCheckResult.EngineAlreadyRunning) &&
+                preset.StartEngineBeforeSeparation)
             {
                 Debug.Log($"{LOG_TAG} p2开始播放，等待 {preset.MultiStageDelay} 秒后执行第二次分级");
                 float elapsed = 0f;
@@ -295,13 +341,18 @@ namespace KSPLaunchCountdown
 
         /// <summary>
         /// 发射前准备序列协程
-        /// 隐藏UI → 开SAS → 设置油门
+        /// 隐藏UI → 开SAS（最多尝试3次） → 设置油门
         /// 单段和多段模式共用
         ///
         /// 油门设置策略：
         ///   - 正常情况下直接设置满油门
         ///   - 若芯一级发动机已启动（"先点火后放行"），倒计时期间保持0油门，
         ///     防止火箭在倒计时语音播放期间提前起飞
+        ///
+        /// SAS处理策略：
+        ///   - 开启SAS后等待并检查状态，最多尝试3次
+        ///   - 3次后仍失败且电量正常：判断为MJ控制，继续执行
+        ///   - 3次后仍失败且电量低：判断为停电，中止发射
         /// </summary>
         private IEnumerator PreLaunchSequence()
         {
@@ -309,9 +360,47 @@ namespace KSPLaunchCountdown
             yield return null;
             if (isCancelled) yield break;
 
-            launchSequence.EnableSAS();
-            yield return null;
-            if (isCancelled) yield break;
+            // 尝试开启SAS并检查状态（最多3次）
+            bool sasEnabled = false;
+            for (int attempt = 0; attempt < 3; attempt++)
+            {
+                launchSequence.EnableSAS();
+
+                // 等待两帧让SAS状态生效
+                yield return null;
+                yield return null;
+                if (isCancelled) yield break;
+
+                if (IsSASEnabled())
+                {
+                    sasEnabled = true;
+                    Debug.Log($"{LOG_TAG} SAS开启成功（第 {attempt + 1} 次尝试）");
+                    break;
+                }
+
+                if (attempt < 2)
+                {
+                    Debug.LogWarning($"{LOG_TAG} SAS开启失败，将进行第 {attempt + 2} 次尝试");
+                }
+            }
+
+            // SAS最终仍失败
+            if (!sasEnabled)
+            {
+                if (lastSafetyCheckResult != null && lastSafetyCheckResult.LowElectricCharge)
+                {
+                    // 电量低，可能是停电导致SAS无法开启
+                    Debug.LogError($"{LOG_TAG} SAS无法开启且电量低，中止发射序列");
+                    isCancelled = true;
+                    OnCountdownStateChanged?.Invoke(false);
+                    yield break;
+                }
+                else
+                {
+                    // 电量正常，可能是MJ控制，继续执行（按用户要求正常分级）
+                    Debug.LogWarning($"{LOG_TAG} SAS无法开启但电量正常，判断为MJ控制，继续执行发射序列");
+                }
+            }
 
             // 根据安全检查结果决定初始油门
             if (lastSafetyCheckResult != null && lastSafetyCheckResult.EngineAlreadyRunning)
@@ -324,6 +413,27 @@ namespace KSPLaunchCountdown
                 launchSequence.SetFullThrottle();
             }
             yield return null;
+        }
+
+        /// <summary>
+        /// 检查当前活跃飞船的SAS是否已开启
+        /// </summary>
+        /// <returns>SAS是否开启</returns>
+        private bool IsSASEnabled()
+        {
+            Vessel vessel = FlightGlobals.ActiveVessel;
+            if (vessel == null) return false;
+
+            try
+            {
+                // 通过ActionGroups直接获取SAS开关状态
+                return vessel.ActionGroups[KSPActionGroup.SAS];
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogWarning($"{LOG_TAG} 检查SAS状态时出错: {ex.Message}");
+                return false;
+            }
         }
 
         /// <summary>
