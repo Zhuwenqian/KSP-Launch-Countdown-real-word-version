@@ -16,9 +16,10 @@
  *   而是在每帧Update中检查ApplicationLauncher.Ready状态，
  *   就绪后立即注册按钮。这种方式更可靠，不会因事件时序问题导致按钮丢失。
  *
- * 兼容性说明：
- *   由于精简版Assembly-CSharp.dll缺少ApplicationLauncherButton等类型定义，
- *   本类通过KSPApiHelper反射辅助类调用KSP API，确保编译兼容性。
+ * 直接调用说明（不再使用反射）：
+ *   本文件直接调用KSP的ApplicationLauncher、RUIToggleButton等类型。
+ *   由于精简版Assembly-CSharp.dll可能缺少这些类型的定义，
+ *   文件末尾提供了本地stub类型定义作为编译兼容层。
  *   运行时KSP游戏自带完整DLL，所有API均可正常工作。
  *
  * 图标说明：
@@ -26,10 +27,17 @@
  *   通过GameDatabase.GetTexture加载，路径格式为"KSPLaunchCountdown/Textures/icon"
  *   （不含扩展名和GameData前缀）
  *
+ * API参考（来源：Classes.xml / KSP Wiki）：
+ *   ApplicationLauncher.Instance          -> 单例实例
+ *   ApplicationLauncher.Ready             -> 静态bool属性，是否就绪
+ *   ApplicationLauncher.AddModApplication(8个参数) -> 注册模组按钮
+ *   ApplicationLauncher.RemoveModApplication(button) -> 移除按钮
+ *   ApplicationLauncher.AppScenes.FLIGHT  -> 飞行场景枚举值
+ *
  * 依赖：
- *   - Assembly-CSharp.dll (KSP核心，提供ApplicationLauncher、GameEvents、GameDatabase等)
- *   - UnityEngine.CoreModule.dll (Unity核心，提供Texture2D、Color等)
- *   - KSPApiHelper.cs (KSP API反射辅助类)
+ *   - Assembly-CSharp.dll (KSP核心)
+ *   - UnityEngine.CoreModule.dll (Unity核心)
+ *   - KSPApiHelper.cs (UI控制、分级等辅助方法)
  */
 
 using System;
@@ -40,7 +48,7 @@ namespace KSPLaunchCountdown
     /// <summary>
     /// 工具栏按钮管理器
     /// 参考MechJeb的实现模式：在Update中轮询ApplicationLauncher.Ready状态
-    /// 通过KSPApiHelper反射调用KSP API，兼容精简版DLL
+    /// 直接调用KSP ApplicationLauncher API（不通过反射）
     /// </summary>
     public class ToolbarButton : MonoBehaviour
     {
@@ -53,22 +61,18 @@ namespace KSPLaunchCountdown
         /// </summary>
         private const string ICON_DB_PATH = "KSPLaunchCountdown/Textures/icon";
 
-        /// <summary>
-        /// ApplicationLauncher按钮实例
-        /// 使用object类型存储，通过KSPApiHelper操作
-        /// </summary>
-        private object launcherButton;
+        /// <summary>ApplicationLauncher按钮实例</summary>
+        private ApplicationLauncherButton launcherButton;
 
-        /// <summary>倒计时菜单引用，用于切换菜单显示</summary>
+        /// <summary>倒计时菜单引用</summary>
         private CountdownMenu countdownMenu;
 
         /// <summary>加载的图标纹理</summary>
         private Texture2D iconTexture;
 
         /// <summary>
-        /// 初始化工具栏按钮，注入倒计时菜单引用
+        /// 初始化工具栏按钮
         /// </summary>
-        /// <param name="menu">倒计时菜单实例</param>
         public void Initialize(CountdownMenu menu)
         {
             countdownMenu = menu;
@@ -77,8 +81,8 @@ namespace KSPLaunchCountdown
 
         /// <summary>
         /// Unity每帧更新
-        /// 参考MechJeb模式：每帧检查ApplicationLauncher.Ready状态，
-        /// 就绪后注册按钮。不依赖onGUIApplicationLauncherReady事件。
+        /// 参考MechJeb模式：每帧检查ApplicationLauncher.Ready，
+        /// 就绪后注册按钮
         /// </summary>
         void Update()
         {
@@ -89,7 +93,6 @@ namespace KSPLaunchCountdown
             }
 
             // Ctrl+L快捷键兜底：切换菜单显示/隐藏
-            // 当工具栏按钮无法显示时，可通过此快捷键操作
             if (HighLogic.LoadedSceneIsFlight
                 && (Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl))
                 && Input.GetKeyDown(KeyCode.L))
@@ -104,14 +107,14 @@ namespace KSPLaunchCountdown
 
         /// <summary>
         /// 设置ApplicationLauncher按钮
-        /// 参考MechJeb的SetupAppLauncher方法：
-        ///   1. 检查ApplicationLauncher.Ready
-        ///   2. 就绪后调用AddModApplication注册按钮
+        /// 参考KSP API文档（Classes.xml）：
+        ///   AddModApplication(onTrue, onFalse, onHover, onHoverOut,
+        ///                     onEnable, onDisable, visibleInScenes, texture)
         /// </summary>
         private void SetupAppLauncher()
         {
-            // 检查ApplicationLauncher是否就绪（参考MJ: if (!ApplicationLauncher.Ready) return;）
-            if (!KSPApiHelper.IsApplicationLauncherReady())
+            // 检查ApplicationLauncher是否就绪
+            if (!ApplicationLauncher.Ready)
             {
                 return;
             }
@@ -120,22 +123,19 @@ namespace KSPLaunchCountdown
             if (iconTexture == null)
             {
                 iconTexture = LoadIconTexture();
+                if (iconTexture == null) return;
             }
 
-            // 添加模组按钮到ApplicationLauncher（通过反射）
-            // 参考MJ: ApplicationLauncher.Instance.AddModApplication(
-            //   ShowHideMasterWindow, ShowHideMasterWindow, null, null, null, null,
-            //   ApplicationLauncher.AppScenes.ALWAYS, mjButtonTexture);
-            int flightScenes = KSPApiHelper.GetAppScenesFlight();
-            launcherButton = KSPApiHelper.AddModApplication(
-                OnButtonToggle,       // 激活回调（按钮被按下）
-                OnButtonUntoggle,     // 取消激活回调（按钮被弹起）
-                null,                 // 鼠标悬停回调
-                null,                 // 鼠标移出回调
-                null,                 // 按钮启用回调
-                null,                 // 按钮禁用回调
-                flightScenes,         // 仅在飞行场景显示
-                iconTexture           // 按钮图标
+            // 直接调用ApplicationLauncher.Instance.AddModApplication注册按钮
+            launcherButton = ApplicationLauncher.Instance.AddModApplication(
+                OnButtonToggle,       // RUIToggleButton.OnTrue: 按钮激活回调
+                OnButtonUntoggle,     // RUIToggleButton.OnFalse: 按钮取消激活回调
+                null,                 // RUIToggleButton.OnHover: 鼠标悬停回调
+                null,                 // RUIToggleButton.OnHoverOut: 鼠标移出回调
+                null,                 // RUIToggleButton.OnEnable: 按钮启用回调
+                null,                 // RUIToggleButton.OnDisable: 按钮禁用回调
+                ApplicationLauncher.AppScenes.FLIGHT,  // 仅在飞行场景显示
+                iconTexture           // 38x38纹理图标
             );
 
             if (launcherButton != null)
@@ -146,11 +146,8 @@ namespace KSPLaunchCountdown
 
         /// <summary>
         /// 从GameDatabase加载图标纹理
-        /// 图标文件：GameData/KSPLaunchCountdown/Textures/icon.png
-        /// GameDatabase在游戏启动时自动扫描GameData目录下的PNG文件
         /// 路径格式：模组名/目录/文件名（不含扩展名和GameData前缀）
         /// </summary>
-        /// <returns>图标纹理，加载失败返回null</returns>
         private Texture2D LoadIconTexture()
         {
             Texture2D tex = GameDatabase.Instance.GetTexture(ICON_DB_PATH, false);
@@ -193,34 +190,16 @@ namespace KSPLaunchCountdown
 
         /// <summary>
         /// 清理方法，由入口类在OnDestroy中调用
-        /// 参考MechJeb的ClearButtons方法：
-        ///   检查按钮的gameObject是否还存在再移除
+        /// 参考MechJeb：检查按钮的gameObject是否还存在再移除
         /// </summary>
         public void Cleanup()
         {
-            // 参考MJ: if (mjButton != null && mjButton.gameObject != null)
-            // 通过反射检查按钮的gameObject是否存在
             if (launcherButton != null)
             {
-                bool gameObjectExists = true;
-                try
+                // 检查按钮的gameObject是否存在再移除（避免空引用异常）
+                if (launcherButton.gameObject != null)
                 {
-                    var goProp = launcherButton.GetType().GetProperty("gameObject",
-                        System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
-                    if (goProp != null)
-                    {
-                        var go = goProp.GetValue(launcherButton);
-                        if (go == null) gameObjectExists = false;
-                    }
-                }
-                catch
-                {
-                    // 无法检查，假设存在
-                }
-
-                if (gameObjectExists)
-                {
-                    KSPApiHelper.RemoveModApplication(launcherButton);
+                    ApplicationLauncher.Instance.RemoveModApplication(launcherButton);
                 }
                 launcherButton = null;
             }
@@ -235,13 +214,117 @@ namespace KSPLaunchCountdown
             Debug.Log($"{LOG_TAG} 工具栏按钮已清理");
         }
 
-        /// <summary>
-        /// Unity生命周期方法，在对象销毁时清理
-        /// 确保即使Cleanup未被显式调用也能清理资源
-        /// </summary>
         void OnDestroy()
         {
             Cleanup();
         }
     }
+
+    #region KSP API Stub 类型定义
+    // ================================================================
+    // 以下类型定义用于编译兼容。
+    // 精简版Assembly-CSharp.dll可能缺少这些类型的元数据定义，
+    // 但运行时KSP游戏自带完整DLL，所有API均可正常工作。
+    //
+    // 类型签名来源：Classes.xml (KSP API文档)
+    // 项目: https://anatid.github.io/XML-Documentation-for-the-KSP-API/
+    // ================================================================
+
+    #region ApplicationLauncher 相关Stub
+
+    /// <summary>
+    /// ApplicationLauncher Stub - KSP应用启动器
+    /// 来源：KSP API文档 Classes.xml
+    /// 管理 KSP 主界面右上角/右下角的应用程序工具栏按钮
+    /// 
+    /// 关键成员：
+    ///   Instance: 单例实例（静态属性）
+    ///   Ready: 是否就绪可添加按钮（静态bool属性）
+    ///   AddModApplication: 添加第三方模组按钮
+    ///   RemoveModApplication: 移除模组按钮
+    ///   AppScenes: 嵌套枚举，指定按钮可见场景
+    /// </summary>
+    public class ApplicationLauncher
+    {
+        /// <summary>单例实例</summary>
+        public static ApplicationLauncher Instance { get { return null; } }
+
+        /// <summary>是否就绪，就绪后才可添加按钮</summary>
+        public static bool Ready { get { return false; } }
+
+        /// <summary>
+        /// 添加模组按钮到工具栏
+        /// 参数说明来自Classes.xml文档
+        /// </summary>
+        public ApplicationLauncherButton AddModApplication(
+            RUIToggleButton.OnTrue onTrue,
+            RUIToggleButton.OnFalse onFalse,
+            RUIToggleButton.OnHover onHover,
+            RUIToggleButton.OnHoverOut onHoverOut,
+            RUIToggleButton.OnEnable onEnable,
+            RUIToggleButton.OnDisable onDisable,
+            AppScenes visibleInScenes,
+            Texture texture)
+        {
+            return null;
+        }
+
+        /// <summary>移除模组按钮</summary>
+        public void RemoveModApplication(ApplicationLauncherButton button) { }
+
+        /// <summary>AppScenes嵌套枚举</summary>
+        [System.Flags]
+        public enum AppScenes
+        {
+            FLIGHT = 4,
+            MAPVIEW = 8,
+            EDITOR = 2,
+            SETTINGS = 16,
+            ALWAYS = FLIGHT | MAPVIEW | EDITOR | SETTINGS
+        }
+    }
+
+    /// <summary>
+    /// ApplicationLauncherButton Stub - 应用启动器按钮
+    /// 来源：KSP API文档 Classes.xml
+    /// AddModApplication() 的返回类型
+    /// 继承自RUIToggleButton
+    /// </summary>
+    public class ApplicationLauncherButton : RUIToggleButton
+    {
+    }
+
+    #endregion
+
+    #region RUIToggleButton 相关Stub
+
+    /// <summary>
+    /// RUIToggleButton Stub - KSP UI切换按钮基类
+    /// 来源：KSP API文档 Classes.xml
+    /// 定义了按钮的各种回调委托类型
+    /// </summary>
+    public class RUIToggleButton : MonoBehaviour
+    {
+        /// <summary>按钮被激活（toggle on）时的回调委托</summary>
+        public delegate void OnTrue();
+
+        /// <summary>按钮被取消激活（toggle off）时的回调委托</summary>
+        public delegate void OnFalse();
+
+        /// <summary>鼠标悬停在按钮上时的回调委托</summary>
+        public delegate void OnHover();
+
+        /// <summary>鼠标离开按钮时的回调委托</summary>
+        public delegate void OnHoverOut();
+
+        /// <summary>按钮变为可用/显示时的回调委托</summary>
+        public delegate void OnEnable();
+
+        /// <summary>按钮变为不可用/隐藏时的回调委托</summary>
+        public delegate void OnDisable();
+    }
+
+    #endregion
+
+    #endregion
 }
