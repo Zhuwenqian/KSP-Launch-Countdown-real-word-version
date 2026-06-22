@@ -185,7 +185,7 @@ KSP Launch Countdown/
 
 3. **启动游戏**
    - 启动KSP，进入飞行场景
-   - 在工具栏右侧找到模组图标（橙色圆形"C"图标或自定义图标）
+   - 在工具栏右侧找到模组图标（自定义图标）
    - 点击图标打开倒计时控制菜单
 
 ### 方法二：从源码编译
@@ -236,7 +236,7 @@ dotnet build -c Release
 
 3. **选择预设语音包**
    - 从下拉列表选择想要的倒计时语音：
-     - **DFH-1**: 东风一号中文语音
+     - **DFH-1**: 东方红一号中文语音
      - **Saturn V**: 土星五号英文语音
      - **Shenzhou Series**: 神舟系列中文语音
      - **Starship**: SpaceX星舰多段语音
@@ -345,25 +345,29 @@ keybd_event(0x20, 0, 2, UIntPtr.Zero);   // 释放空格键
 
 **实现位置**: [LaunchSequence.cs#L80-L95](src/KSPLaunchCountdown/LaunchSequence.cs#L80-L95)
 
-#### 3. 工具栏按钮注册：轮询而非事件
+#### 3. 工具栏按钮注册：直接调用 KSP.UI.Screens.ApplicationLauncher
 
 **原因**：
-- 参考 MechJeb 的实现模式
+- `ApplicationLauncher` 实际位于 `KSP.UI.Screens` 命名空间
+- 参考 `StagingAndEngineConfig.cs.example` 的实现模式
+- 直接调用真实的 `ApplicationLauncher.Instance.AddModApplication()` 和 `RemoveModApplication()`
 - 不依赖 `GameEvents.onGUIApplicationLauncherReady` 事件
-- 在每帧 `Update` 中检查 `ApplicationLauncher.Ready` 状态
+- 在每帧 `Update` 中检查 `ApplicationLauncher.Instance != null`，就绪后立即注册按钮
 - 更可靠，不会因事件时序问题导致按钮丢失
 
-**实现位置**: [ToolbarButton.cs#L70-L85](src/KSPLaunchCountdown/ToolbarButton.cs#L70-L85)
+**实现位置**: [ToolbarButton.cs#L81-L147](src/KSPLaunchCountdown/ToolbarButton.cs#L81-L147)
 
 #### 4. 反射调用的必要性
 
 **原因**：
-- 编译时使用精简版 Assembly-CSharp.dll（仅包含必要类型）
-- 运行时KSP游戏自带完整DLL
-- 对于编译时缺少的类型定义，使用本地Stub类作为兼容层
-- 对于运行时动态调用的方法（如GameEvents），使用反射
+- 大部分 KSP API 可直接引用本地 KSP DLL 中的类型
+- 已补充 `UnityEngine.AnimationModule.dll` 引用，使 `ApplicationLauncherButton` 可直接编译
+- 对于本地 DLL 中仍缺少的类型或方法（如 `GameEvents.onHideUI` 的 `Fire()`），使用反射
 
-**受影响的方法**:
+**直接调用的方法**:
+- `KSP.UI.Screens.ApplicationLauncher.AddModApplication()` / `RemoveModApplication()`
+
+**仍使用反射的方法**:
 - `GameEvents.onHideUI.Fire()` / `GameEvents.onShowUI.Fire()`: 通过反射触发
 
 ### 添加新功能的步骤

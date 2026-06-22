@@ -94,6 +94,14 @@
       <HintPath>..\..\KSP DLL\UnityEngine.UIModule.dll</HintPath>
       <Private>false</Private>
     </Reference>
+    <!--
+      UnityEngine.AnimationModule: ApplicationLauncherButton 的间接依赖。
+      KSP 运行时已自带，不复制到输出。
+    -->
+    <Reference Include="UnityEngine.AnimationModule">
+      <HintPath>..\..\KSP DLL\UnityEngine.AnimationModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
     <Reference Include="UnityEngine.TextRenderingModule">
       <HintPath>..\..\KSP DLL\UnityEngine.TextRenderingModule.dll</HintPath>
       <Private>false</Private>

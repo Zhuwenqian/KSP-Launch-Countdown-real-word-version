@@ -2,24 +2,28 @@
  * KSPApiHelper.cs - KSP1 API辅助类
  *
  * 用途：封装KSP API调用，分为直接调用和反射调用两部分。
- *   - 可直接引用的类型（精简DLL中存在）：UI控制、分级、UISkin等
- *   - 需反射调用的类型（精简DLL中缺失）：GameEvents事件注册
+ *   - 可直接引用的类型：UI控制、分级、UISkin、工具栏按钮等
+ *   - 需反射调用的类型（精简DLL中缺失或无法直接引用）：GameEvents事件注册
  *
- * 已移除的反射代码（现改为直接调用）：
+ * 直接调用（通过正常 using 引用）：
  *   - ApplicationLauncher / ApplicationLauncherButton → ToolbarButton.cs 直接调用
- *   - RUIToggleButton 委托类型 → ToolbarButton.cs 直接使用
+ *   - 命名空间：KSP.UI.Screens
+ *   - 说明：已补充 UnityEngine.AnimationModule 引用，解决 ApplicationLauncherButton
+ *     的间接依赖，因此无需再通过 stub 或反射调用。
  *
  * 仍保留反射的部分：
  *   - GameEvents.onHideUI / onShowUI 的 Fire() 调用（EventData反射）
  *
- * 精简DLL中存在的类型（可直接引用）：
+ * 可直接引用的类型（本地 KSP DLL 中存在）：
  *   GameEvents, EventVoid, HighLogic, FlightGlobals, FlightInputHandler,
  *   KSPActionGroup, FlightCtrlState, KSPAddon, GameDatabase, KSPUtil,
- *   PopupDialog, KSP.UI.UIMasterController
+ *   PopupDialog, KSP.UI.UIMasterController,
+ *   KSP.UI.Screens.ApplicationLauncher, KSP.UI.Screens.ApplicationLauncherButton
  *
  * 依赖：
- *   - Assembly-CSharp.dll (KSP核心，精简版即可，运行时使用完整版)
+ *   - Assembly-CSharp.dll (KSP核心)
  *   - UnityEngine.CoreModule.dll (Unity核心)
+ *   - UnityEngine.AnimationModule.dll (ApplicationLauncherButton 的间接依赖)
  */
 
 using System;

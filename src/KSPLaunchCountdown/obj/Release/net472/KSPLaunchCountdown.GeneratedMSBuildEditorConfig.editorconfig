@@ -1,6 +1,6 @@
 is_global = true
 build_property.RootNamespace = KSPLaunchCountdown
-build_property.ProjectDir = e:\Projects\KSP Launch Countdown\src\KSPLaunchCountdown\
+build_property.ProjectDir = E:\Projects\KSP Launch Countdown\src\KSPLaunchCountdown\
 build_property.EnableComHosting = 
 build_property.EnableGeneratedComInterfaceComImportInterop = 
 build_property.CsWinRTUseWindowsUIXamlProjections = false

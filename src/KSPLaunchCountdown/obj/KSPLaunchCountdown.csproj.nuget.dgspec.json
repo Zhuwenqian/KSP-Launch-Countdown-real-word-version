@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "e:\\Projects\\KSP Launch Countdown\\src\\KSPLaunchCountdown\\KSPLaunchCountdown.csproj": {}
+    "E:\\Projects\\KSP Launch Countdown\\src\\KSPLaunchCountdown\\KSPLaunchCountdown.csproj": {}
   },
   "projects": {
-    "e:\\Projects\\KSP Launch Countdown\\src\\KSPLaunchCountdown\\KSPLaunchCountdown.csproj": {
+    "E:\\Projects\\KSP Launch Countdown\\src\\KSPLaunchCountdown\\KSPLaunchCountdown.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "e:\\Projects\\KSP Launch Countdown\\src\\KSPLaunchCountdown\\KSPLaunchCountdown.csproj",
+        "projectUniqueName": "E:\\Projects\\KSP Launch Countdown\\src\\KSPLaunchCountdown\\KSPLaunchCountdown.csproj",
         "projectName": "KSPLaunchCountdown",
-        "projectPath": "e:\\Projects\\KSP Launch Countdown\\src\\KSPLaunchCountdown\\KSPLaunchCountdown.csproj",
+        "projectPath": "E:\\Projects\\KSP Launch Countdown\\src\\KSPLaunchCountdown\\KSPLaunchCountdown.csproj",
         "packagesPath": "C:\\Users\\Administrator\\.nuget\\packages\\",
-        "outputPath": "e:\\Projects\\KSP Launch Countdown\\src\\KSPLaunchCountdown\\obj\\",
+        "outputPath": "E:\\Projects\\KSP Launch Countdown\\src\\KSPLaunchCountdown\\obj\\",
         "projectStyle": "PackageReference",
         "configFilePaths": [
           "C:\\Users\\Administrator\\AppData\\Roaming\\NuGet\\NuGet.Config"

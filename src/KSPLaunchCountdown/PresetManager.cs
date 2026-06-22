@@ -6,7 +6,7 @@
  *
  * 目录结构示例：
  *   GameData/KSPLaunchCountdown/Lauch Voice/
- *   ├── DFH-1/                  <- 预设名称 "DFH-1"（东风一号）
+ *   ├── DFH-1/                  <- 预设名称 "DFH-1"（东方红一号）
  *   │   ├── DFH-1.ogg           <- 单段音频模式
  *   │   └── preset.cfg          <- 预设配置文件（可选）
  *   ├── Shenzhou Series/        <- 预设名称 "Shenzhou Series"
