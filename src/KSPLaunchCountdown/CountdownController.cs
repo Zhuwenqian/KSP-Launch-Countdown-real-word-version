@@ -23,9 +23,10 @@
  *   3. 设置0油门（倒计时期间保持推力为0）
  *   4. 播放倒计时音频
  *   5. 等待音频播放结束
- *   6. 只加满油门，不执行自动分级
- *   7. 等待3秒
- *   8. 恢复游戏UI
+ *   6. 加满油门
+ *   7. 若UI勾选"先启动发动机再分离"，按预设延迟执行分级（放行）
+ *   8. 等待3秒
+ *   9. 恢复游戏UI
  *
  * 发射流程（多段音频模式 p1/p2，发动机未启动）：
  *   1. 隐藏游戏UI
@@ -210,7 +211,8 @@ namespace KSPLaunchCountdown
         /// <summary>
         /// 单段音频倒计时协程
         /// 流程：隐藏UI → SAS → [发动机已启动则0油门/否则满油门] → 播放音频 →
-        ///       [若发动机已启动则只加满油门；否则分级 → 可选第二次分级] → 延迟 → 恢复UI
+        ///       [若发动机已启动则加满油门，勾选"先启动发动机再分离"时延迟后分级；
+        ///        否则分级 → 可选第二次分级] → 延迟 → 恢复UI
         /// </summary>
         private IEnumerator SingleSegmentCountdownCoroutine(CountdownPreset preset)
         {
@@ -232,11 +234,31 @@ namespace KSPLaunchCountdown
             // 步骤6：音频播放结束后的处理
             if (lastSafetyCheckResult != null && lastSafetyCheckResult.EngineAlreadyRunning)
             {
-                // 发动机已启动时：只加满油门，不执行自动分级
-                // 由玩家手动控制后续分级操作
-                Debug.Log($"{LOG_TAG} 倒计时音频播放结束，发动机已点火，现在加满油门（不自动分级）");
+                // 发动机已启动时：先加满油门
+                Debug.Log($"{LOG_TAG} 倒计时音频播放结束，发动机已点火，现在加满油门");
                 launchSequence.SetFullThrottle();
                 yield return null;
+
+                // 若勾选了"先启动发动机再分离"，按配置文件中的延迟执行分级（放行）
+                if (preset.StartEngineBeforeSeparation)
+                {
+                    Debug.Log($"{LOG_TAG} 等待 {preset.SingleStageDelay} 秒后执行放行分级");
+                    float elapsed = 0f;
+                    while (elapsed < preset.SingleStageDelay && !isCancelled)
+                    {
+                        elapsed += UnityEngine.Time.deltaTime;
+                        yield return null;
+                    }
+                    if (isCancelled) yield break;
+
+                    launchSequence.ActivateNextStage();
+                    Debug.Log($"{LOG_TAG} 放行分级完成");
+                }
+                else
+                {
+                    // 未勾选时由玩家手动控制后续分级操作
+                    Debug.Log($"{LOG_TAG} 未启用先启动发动机再分离，不执行自动分级");
+                }
             }
             else
             {
@@ -268,7 +290,8 @@ namespace KSPLaunchCountdown
         /// <summary>
         /// 多段音频倒计时协程
         /// 流程：隐藏UI → SAS → [发动机已启动则0油门/否则满油门] → 播放p1 →
-        ///       [若发动机已启动则p1结束后只加满油门；否则分级] → 播放p2 →
+        ///       [若发动机已启动则p1结束后加满油门，勾选"先启动发动机再分离"时延迟后分级；
+        ///        否则分级] → 播放p2 →
         ///       [若发动机未启动且启用先启动发动机再分离则第二次分级] →
         ///       等待p2结束 → 延迟 → 恢复UI
         /// </summary>
@@ -293,10 +316,31 @@ namespace KSPLaunchCountdown
             // 步骤6：p1播放结束后的处理
             if (lastSafetyCheckResult != null && lastSafetyCheckResult.EngineAlreadyRunning)
             {
-                // 发动机已启动时：只加满油门，不执行自动分级，然后继续播放p2
-                Debug.Log($"{LOG_TAG} p1音频播放结束，发动机已点火，现在加满油门（不自动分级）");
+                // 发动机已启动时：先加满油门
+                Debug.Log($"{LOG_TAG} p1音频播放结束，发动机已点火，现在加满油门");
                 launchSequence.SetFullThrottle();
                 yield return null;
+
+                // 若勾选了"先启动发动机再分离"，按配置文件中的延迟执行分级（放行）
+                if (preset.StartEngineBeforeSeparation)
+                {
+                    Debug.Log($"{LOG_TAG} 等待 {preset.MultiStageDelay} 秒后执行放行分级");
+                    float elapsed = 0f;
+                    while (elapsed < preset.MultiStageDelay && !isCancelled)
+                    {
+                        elapsed += UnityEngine.Time.deltaTime;
+                        yield return null;
+                    }
+                    if (isCancelled) yield break;
+
+                    launchSequence.ActivateNextStage();
+                    Debug.Log($"{LOG_TAG} 放行分级完成");
+                }
+                else
+                {
+                    // 未勾选时由玩家手动控制后续分级操作
+                    Debug.Log($"{LOG_TAG} 未启用先启动发动机再分离，不执行自动分级");
+                }
             }
             else
             {

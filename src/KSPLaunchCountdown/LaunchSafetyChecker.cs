@@ -6,12 +6,13 @@
  *   1. 是否在发射台（地面高度 < 100m 且速度接近0）
  *   2. 是否已有正在进行的倒计时
  *   3. 飞船电量是否充足（当前电量 < 总电量 1/20 时拒绝发射）
- *   4. 芯一级发动机是否已启动
+ *   4. 芯一级发动机是否已启动（包括已点火但当前油门为0的情况）
  *
  * 对于发动机已启动的情况，模组采用"先点火后放行"策略：
- *   - 倒计时期间保持油门为0
- *   - 倒计时音频播放结束后只加满油门，不执行自动分级
- *   - 由玩家手动控制后续分级操作
+ *   - 倒计时期间保持油门为0，防止火箭提前起飞
+ *   - 倒计时音频播放结束后加满油门
+ *   - 如果UI勾选了"先启动发动机再分离"，则按预设延迟执行分级（放行）
+ *   - 如果未勾选该选项，则不执行自动分级，由玩家手动控制后续分级操作
  *
  * 设计说明：
  *   - 所有阈值参数在类内集中定义，便于统一调整
@@ -42,8 +43,9 @@ namespace KSPLaunchCountdown
         public List<string> FailureReasons { get; set; } = new List<string>();
 
         /// <summary>
-        /// 芯一级发动机是否已经启动
-        /// 如果为true，倒计时期间应保持油门为0，音频结束后再加满油门
+        /// 芯一级发动机是否已经启动（包括已点火但油门为0的情况）
+        /// 如果为true，倒计时期间应保持油门为0，音频结束后再加满油门；
+        /// 若UI勾选"先启动发动机再分离"，则按预设延迟执行分级（放行）
         /// </summary>
         public bool EngineAlreadyRunning { get; set; } = false;
 
@@ -191,10 +193,13 @@ namespace KSPLaunchCountdown
         }
 
         /// <summary>
-        /// 检查飞船上是否有任何发动机正在产生推力
+        /// 检查飞船上是否有任何发动机已点火或正在产生推力
+        /// 判断标准：发动机可运行（isOperational）且已被点火（EngineIgnited）
+        /// 或当前正在产生推力（finalThrust > 0.01f）。
+        /// 这样可以识别玩家已手动点火、但油门保持为0的情况。
         /// </summary>
         /// <param name="vessel">当前活跃飞船</param>
-        /// <returns>是否有发动机正在运行</returns>
+        /// <returns>是否有发动机已点火或正在运行</returns>
         private static bool IsAnyEngineRunning(Vessel vessel)
         {
             if (vessel == null) return false;
@@ -208,8 +213,10 @@ namespace KSPLaunchCountdown
                     // ModuleEnginesFX 是其衍生类型，使用 is 可同时匹配
                     if (module is ModuleEngines engine)
                     {
-                        // 检查发动机是否正在产生推力（大于一个很小的阈值）
-                        if (engine.isOperational && engine.finalThrust > 0.01f)
+                        // 检查发动机是否已点火或正在产生推力
+                        // EngineIgnited 为 true 表示发动机已被玩家启动，即使当前油门为 0、
+                        // finalThrust 为 0，也应视为已启动，避免倒计时期间提前加油门
+                        if (engine.isOperational && (engine.EngineIgnited || engine.finalThrust > 0.01f))
                         {
                             return true;
                         }
