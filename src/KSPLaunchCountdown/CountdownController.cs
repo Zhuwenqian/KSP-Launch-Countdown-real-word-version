@@ -20,11 +20,11 @@
  * 发射流程（单段/多段音频模式，发动机已启动）：
  *   1. 隐藏游戏UI
  *   2. 开启SAS（最多尝试3次）
- *   3. 设置0油门（倒计时期间保持推力为0）
+ *   3. 设置0油门（倒计时期间保持推力为0，防止提前起飞）
  *   4. 播放倒计时音频
  *   5. 等待音频播放结束
  *   6. 加满油门
- *   7. 若UI勾选"先启动发动机再分离"，按预设延迟执行分级（放行）
+ *   7. [若UI勾选"先启动发动机再分离"] 按预设延迟执行分级（放行）
  *   8. 等待3秒
  *   9. 恢复游戏UI
  *
@@ -210,9 +210,9 @@ namespace KSPLaunchCountdown
 
         /// <summary>
         /// 单段音频倒计时协程
-        /// 流程：隐藏UI → SAS → [发动机已启动则0油门/否则满油门] → 播放音频 →
-        ///       [若发动机已启动则加满油门，勾选"先启动发动机再分离"时延迟后分级；
-        ///        否则分级 → 可选第二次分级] → 延迟 → 恢复UI
+        /// 流程：隐藏UI → SAS → [发动机已点火则0油门/否则满油门] → 播放音频 →
+        ///       [若发动机已点火：加满油门，勾选"先启动发动机再分离"时延迟后放行；
+        ///        否则分级，若启用"先启动发动机再分离"则延迟后第二次分级] → 延迟 → 恢复UI
         /// </summary>
         private IEnumerator SingleSegmentCountdownCoroutine(CountdownPreset preset)
         {
@@ -234,12 +234,12 @@ namespace KSPLaunchCountdown
             // 步骤6：音频播放结束后的处理
             if (lastSafetyCheckResult != null && lastSafetyCheckResult.EngineAlreadyRunning)
             {
-                // 发动机已启动时：先加满油门
+                // 发动机已点火：先加满油门
                 Debug.Log($"{LOG_TAG} 倒计时音频播放结束，发动机已点火，现在加满油门");
                 launchSequence.SetFullThrottle();
                 yield return null;
 
-                // 若勾选了"先启动发动机再分离"，按配置文件中的延迟执行分级（放行）
+                // 若勾选了"先启动发动机再分离"，按配置文件中的延迟执行放行分级
                 if (preset.StartEngineBeforeSeparation)
                 {
                     Debug.Log($"{LOG_TAG} 等待 {preset.SingleStageDelay} 秒后执行放行分级");
@@ -256,7 +256,7 @@ namespace KSPLaunchCountdown
                 }
                 else
                 {
-                    // 未勾选时由玩家手动控制后续分级操作
+                    // 未勾选时只加满油门，不执行自动分级，由玩家手动控制后续分级
                     Debug.Log($"{LOG_TAG} 未启用先启动发动机再分离，不执行自动分级");
                 }
             }
@@ -289,10 +289,10 @@ namespace KSPLaunchCountdown
 
         /// <summary>
         /// 多段音频倒计时协程
-        /// 流程：隐藏UI → SAS → [发动机已启动则0油门/否则满油门] → 播放p1 →
-        ///       [若发动机已启动则p1结束后加满油门，勾选"先启动发动机再分离"时延迟后分级；
+        /// 流程：隐藏UI → SAS → [发动机已点火则0油门/否则满油门] → 播放p1 →
+        ///       [若发动机已点火：加满油门，勾选"先启动发动机再分离"时延迟后放行；
         ///        否则分级] → 播放p2 →
-        ///       [若发动机未启动且启用先启动发动机再分离则第二次分级] →
+        ///       [若发动机未启动且启用"先启动发动机再分离"则第二次分级] →
         ///       等待p2结束 → 延迟 → 恢复UI
         /// </summary>
         private IEnumerator MultiSegmentCountdownCoroutine(CountdownPreset preset)
@@ -316,12 +316,12 @@ namespace KSPLaunchCountdown
             // 步骤6：p1播放结束后的处理
             if (lastSafetyCheckResult != null && lastSafetyCheckResult.EngineAlreadyRunning)
             {
-                // 发动机已启动时：先加满油门
+                // 发动机已点火：先加满油门
                 Debug.Log($"{LOG_TAG} p1音频播放结束，发动机已点火，现在加满油门");
                 launchSequence.SetFullThrottle();
                 yield return null;
 
-                // 若勾选了"先启动发动机再分离"，按配置文件中的延迟执行分级（放行）
+                // 若勾选了"先启动发动机再分离"，按配置文件中的延迟执行放行分级
                 if (preset.StartEngineBeforeSeparation)
                 {
                     Debug.Log($"{LOG_TAG} 等待 {preset.MultiStageDelay} 秒后执行放行分级");
@@ -338,7 +338,7 @@ namespace KSPLaunchCountdown
                 }
                 else
                 {
-                    // 未勾选时由玩家手动控制后续分级操作
+                    // 未勾选时只加满油门，不执行自动分级，由玩家手动控制后续分级
                     Debug.Log($"{LOG_TAG} 未启用先启动发动机再分离，不执行自动分级");
                 }
             }
@@ -390,8 +390,9 @@ namespace KSPLaunchCountdown
         ///
         /// 油门设置策略：
         ///   - 正常情况下直接设置满油门
-        ///   - 若芯一级发动机已启动（"先点火后放行"），倒计时期间保持0油门，
+        ///   - 若芯一级发动机已点火，倒计时期间保持0油门，
         ///     防止火箭在倒计时语音播放期间提前起飞
+        ///   - 是否执行后续放行分级由UI上的"先启动发动机再分离"选项控制
         ///
         /// SAS处理策略：
         ///   - 开启SAS后等待并检查状态，最多尝试3次
@@ -447,6 +448,8 @@ namespace KSPLaunchCountdown
             }
 
             // 根据安全检查结果决定初始油门
+            // 发动机已点火时，倒计时期间保持0油门，防止火箭提前起飞；
+            // 是否执行后续放行分级由UI上的"先启动发动机再分离"选项控制。
             if (lastSafetyCheckResult != null && lastSafetyCheckResult.EngineAlreadyRunning)
             {
                 Debug.Log($"{LOG_TAG} 发动机已启动，倒计时期间保持0油门");
