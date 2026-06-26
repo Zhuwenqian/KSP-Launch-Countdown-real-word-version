@@ -1,3 +1,429 @@
+# KSP Launch Countdown - KSP1 Launch Countdown Mod (English Version)
+
+[![KSP Version](https://img.shields.io/badge/KSP-1.12x-blue)](https://www.kerbalspaceprogram.com/)
+[![.NET Framework](https://img.shields.io/badge/.NET-4.7.2-purple)](https://docs.microsoft.com/en-us/dotnet/framework/)
+[![License](https://img.shields.io/badge/License-GPL%20v3-blue)](./LICENSE)
+
+## 📖 Introduction
+
+**KSP Launch Countdown** is a mod for Kerbal Space Program (KSP) 1 that provides a professional launch countdown experience. It simulates real-world space launch countdown procedures, including countdown voice announcements and automated launch sequence execution (enable SAS, set full throttle, stage activation).
+
+### ✨ Core Features
+
+- **🎯 Professional Countdown Sequence**: Complete launch countdown sequence simulating real space launch procedures.
+- **🔊 Multiple Voice Presets**: Built-in voice packs (LM-1, LM-2F, Saturn V, Soyuz, SpaceX, Space Shuttle, Starship, Wenchang, Xichang) with support for custom extensions.
+- **🎵 Dual Audio Modes**:
+  - Single-segment mode: one audio file for the entire countdown.
+  - Multi-segment mode (p1/p2): p1 plays the countdown, staging occurs, then p2 continues (e.g., "Ignition", "Liftoff").
+- **⚙️ Smart Launch Control**:
+  - Auto-enable SAS (up to 3 attempts; if it fails, decides whether MechJeb or power loss based on electric charge).
+  - Auto-set and maintain full throttle.
+  - Supports standard staging and "start engine before separation" modes.
+  - Detects engine ignition state even at 0% throttle; holds 0% throttle during countdown and stages as needed after audio ends.
+- **🎨 User-Friendly UI**:
+  - IMGUI-style control menu.
+  - ApplicationLauncher toolbar integration.
+  - `Ctrl+L` shortcut to toggle the menu.
+- **🔊 Volume Control**: In-menu volume slider (0%~100%) with real-time adjustment and auto-save to the current save game.
+- **🌍 Multi-language Support**: Built-in Simplified Chinese, English, and Russian UI text.
+- **🛡️ Pre-Launch Safety Checks**:
+  - Checks launch pad state, countdown conflicts, and engine state.
+  - Electric charge check: refuses launch if charge is below 5% of total capacity.
+  - SAS smart judgment: tries 3 times; continues if MechJeb is assumed, aborts if power loss is assumed.
+  - "Force Launch" option when checks fail.
+- **📦 Easy to Extend**: Modular design supports adding custom voice packs and configurations.
+
+## 🚀 Feature Demo
+
+### Launch Sequence Example (Single-Segment Audio Mode)
+
+```
+Timeline:
+T-0s   ┃ Click Launch button
+       ┃ ↓
+T+0s   ┃ Hide game UI → Enable SAS → Set full throttle
+       ┃ ↓
+T+0.1s ┃ Start playing countdown audio (e.g., "10, 9, 8... 1, Ignition")
+       ┃ ↓
+T+Xs   ┃ Audio ends → Perform staging (separation + engine ignition)
+       ┃ [If "Start engine before separation" is enabled]
+       ┃ Wait configurable delay → Second staging
+       ┃ ↓
+T+X+3s ┃ Restore game UI → Release throttle hold → Done ✓
+```
+
+### Launch Sequence Example (Multi-Segment Audio Mode p1/p2)
+
+```
+Timeline:
+T-0s   ┃ Click Launch button
+       ┃ ↓
+T+0s   ┃ Hide game UI → Enable SAS → Set full throttle
+       ┃ ↓
+T+0.1s ┃ Play p1 audio (countdown part: "10, 9, 8... 1")
+       ┃ ↓
+T+Xs   ┃ p1 ends → First staging
+       ┃ ↓
+T+Xs   ┃ Play p2 audio (post-ignition part: "Ignition! Liftoff!")
+       ┃ [If "Start engine before separation" is enabled]
+       ┃ Wait delay after p2 starts → Second staging
+       ┃ ↓
+T+Ys   ┃ p2 ends → Wait 3 seconds
+       ┃ ↓
+T+Y+3s ┃ Restore game UI → Done ✓
+```
+
+## 📁 Project Structure
+
+```
+KSP Launch Countdown/
+├── src/                                    # Source code directory
+│   └── KSPLaunchCountdown/
+│       ├── KSPLaunchCountdownMod.cs        # 🔷 Mod entry class (main controller)
+│       ├── CountdownController.cs          # ⏱️ Countdown controller (core logic)
+│       ├── CountdownMenu.cs                # 🖥️ Countdown menu UI
+│       ├── LaunchSequence.cs               # 🚀 Launch sequence executor
+│       ├── PresetManager.cs                # 📦 Voice preset manager
+│       ├── AudioPlayer.cs                  # 🔊 Audio player
+│       ├── ToolbarButton.cs                # 🔘 Toolbar button manager
+│       ├── KSPApiHelper.cs                 # 🔧 KSP API helper class
+│       └── KSPLaunchCountdown.csproj       # 📋 Project configuration file
+│
+├── GameData/KSPLaunchCountdown/            # 🎮 Game assets directory (deploy to KSP)
+│   ├── Lauch Voice/                        # 🎤 Voice pack directory
+│   │   ├── LM-1(70s Jiuquan)/              #    LM-1 (70s Jiuquan) Chinese voice pack
+│   │   ├── LM-2F(Jiuquan)/                 #    LM-2F (Jiuquan) Chinese voice pack
+│   │   ├── Saturn V/                       #    Saturn V English voice pack
+│   │   ├── Soyuz/                          #    Soyuz Russian voice pack
+│   │   ├── Space shuttle/                  #    Space Shuttle English voice pack (multi-segment)
+│   │   ├── SpaceX/                         #    SpaceX English voice pack
+│   │   ├── Starship/                       #    Starship English voice pack (multi-segment)
+│   │   ├── Wenchang/                       #    Wenchang Chinese voice pack
+│   │   └── Xichang/                        #    Xichang Chinese voice pack
+│   ├── Localization/                       # 🌍 Localization files
+│   │   ├── zh-cn.cfg                       #    Simplified Chinese
+│   │   ├── en-us.cfg                       #    English
+│   │   └── ru-ru.cfg                       #    Russian
+│   └── Textures/
+│       └── icon.png                        # 🖼️ Toolbar icon (38x38)
+│
+├── build/                                  # 📦 Build output directory
+│   └── Release/net472/
+│       ├── KSPLaunchCountdown.dll          # Compiled mod DLL
+│       └── KSPLaunchCountdown.pdb          # Debug symbols
+│
+├── readme/                                 # 📚 Documentation directory
+│   └── 功能更新.md                         #    Feature update log
+│
+├── LICENSE                                 # 📄 License file
+├── KSPLaunchCountdown.sln                  # Visual Studio solution
+└── Classes.xml                             # KSP API reference document
+```
+
+## 🛠️ Technical Architecture
+
+### System Architecture Diagram
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    KSPLaunchCountdownMod                     │
+│                  (Entry Class / Main Controller)             │
+├─────────────────────────────────────────────────────────────┤
+│  ┌─────────────┐  ┌──────────────┐  ┌────────────────────┐  │
+│  │PresetManager│  │ AudioPlayer  │  │  LaunchSequence    │  │
+│  └──────┬──────┘  └──────┬───────┘  └────────┬───────────┘  │
+│         │                │                    │              │
+│         ▼                ▼                    ▼              │
+│  ┌─────────────────────────────────────────────────────┐    │
+│  │              CountdownController                     │    │
+│  └────────────────────────┬────────────────────────────┘    │
+│                           │                                  │
+│                           ▼                                  │
+│  ┌─────────────────────────────────────────────────────┐    │
+│  │               CountdownMenu                          │    │
+│  └────────────────────────┬────────────────────────────┘    │
+│                           │                                  │
+│                           ▼                                  │
+│  ┌─────────────────────────────────────────────────────┐    │
+│  │               ToolbarButton                          │    │
+│  └─────────────────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────────┘
+         │
+         ▼
+┌─────────────────────────────────────────────────────────────┐
+│                       KSPApiHelper                          │
+│                  KSP API Helper (Reflection)                 │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Core Module Overview
+
+| Module | File | Responsibility |
+|--------|------|---------------|
+| **KSPLaunchCountdownMod** | `KSPLaunchCountdownMod.cs` | Mod entry point, initializes all submodules, manages lifecycle |
+| **CountdownController** | `CountdownController.cs` | Core countdown logic, coordinates audio playback and launch sequence timing |
+| **CountdownMenu** | `CountdownMenu.cs` | IMGUI interface for preset selection, settings, and launch control |
+| **LaunchSequence** | `LaunchSequence.cs` | Executes vessel operations: SAS, throttle control, staging |
+| **PresetManager** | `PresetManager.cs` | Scans and manages voice pack presets, loads config files |
+| **AudioPlayer** | `AudioPlayer.cs` | Loads and plays .ogg audio files with async callbacks |
+| **ToolbarButton** | `ToolbarButton.cs` | Manages ApplicationLauncher toolbar button |
+| **KSPApiHelper** | `KSPApiHelper.cs` | Encapsulates KSP API calls, handles reflection and compatibility |
+| **SettingsManager** | `SettingsManager.cs` | Manages global settings (volume) loading and saving |
+| **Localization** | `Localization.cs` | Multi-language text loading and translation |
+| **LaunchSafetyChecker** | `LaunchSafetyChecker.cs` | Pre-launch safety checks |
+
+## 📦 Installation
+
+### Method 1: Manual Installation (Recommended)
+
+1. **Download the latest release**
+   - Download the latest `KSPLaunchCountdown.zip` from the [Releases](../../releases) page.
+
+2. **Extract into your KSP installation directory**
+   ```
+   Kerbal Space Program/
+   └── GameData/
+       └── KSPLaunchCountdown/     ← Copy the entire folder here
+           ├── Lauch Voice/
+           │   ├── LM-1(70s Jiuquan)/
+           │   ├── LM-2F(Jiuquan)/
+           │   ├── Saturn V/
+           │   ├── Soyuz/
+           │   ├── Space shuttle/
+           │   ├── SpaceX/
+           │   ├── Starship/
+           │   ├── Wenchang/
+           │   └── Xichang/
+           ├── Textures/
+           │   └── icon.png
+           └── KSPLaunchCountdown.dll  ← Copy from build/Release/net472/
+   ```
+
+3. **Launch the game**
+   - Start KSP and enter a flight scene.
+   - Find the mod icon on the right side of the toolbar.
+   - Click the icon to open the countdown control menu.
+
+### Method 2: Build from Source
+
+#### Prerequisites
+
+- **IDE**: Visual Studio 2019+ or JetBrains Rider
+- **.NET SDK**: .NET Framework 4.7.2 developer pack
+- **KSP DLLs**: Copy the following DLLs from your KSP installation to a `KSP DLL/` folder in the project root:
+  - `KSP_x64_Data/Managed/Assembly-CSharp.dll`
+  - `KSP_x64_Data/Managed/Assembly-CSharp-firstpass.dll`
+  - `KSP_x64_Data/Managed/KSPAssets.dll`
+  - `KSP_x64_Data/Managed/UnityEngine.dll`
+  - Other Unity modules as required (see `.csproj`)
+
+#### Build Steps
+
+```bash
+# 1. Clone the repository
+git clone <repository-url>
+cd "KSP Launch Countdown"
+
+# 2. Open the solution in Visual Studio
+
+# 3. Restore NuGet packages (if any)
+dotnet restore
+
+# 4. Build Release version
+dotnet build -c Release
+
+# 5. Deploy
+# Copy build/Release/net472/KSPLaunchCountdown.dll to
+# KSP GameData/KSPLaunchCountdown/
+```
+
+## 🎮 User Guide
+
+### Basic Usage
+
+1. **Enter a flight scene**
+   - Build your rocket in the VAB.
+   - Launch it to the launch pad.
+
+2. **Open the countdown menu**
+   - Method 1: Click the mod icon on the toolbar.
+   - Method 2: Press `Ctrl + L`.
+
+3. **Select a voice preset**
+   - Choose from the dropdown list:
+     - **LM-1(70s Jiuquan)**: LM-1 Chinese voice
+     - **LM-2F(Jiuquan)**: LM-2F Chinese voice
+     - **Saturn V**: Saturn V English voice
+     - **Soyuz**: Soyuz Russian voice
+     - **Space shuttle**: Space Shuttle English voice (multi-segment)
+     - **SpaceX**: SpaceX English voice
+     - **Starship**: SpaceX Starship English voice (multi-segment)
+     - **Wenchang**: Wenchang Chinese voice
+     - **Xichang**: Xichang Chinese voice
+
+4. **Configure options (optional)**
+   - ☑️ **Start engine before separation**: For rockets that need ignition before decoupling.
+     - Normal flow: performs two staging operations with a configurable delay.
+     - If the core-stage engine is already ignited: holds 0% throttle during countdown, sets full throttle after audio ends; stages after delay if checked, otherwise leaves staging to the player.
+   - **Volume slider**: Adjust countdown voice volume (0%~100%); settings are auto-saved to the current save game.
+
+5. **Start the countdown**
+   - Click the **Launch** button.
+   - The system performs pre-launch safety checks automatically.
+   - If checks fail (e.g., not on launch pad), a warning is shown; check "Force Launch" to bypass.
+   - Watch the automated launch sequence!
+
+6. **Cancel the countdown (if needed)**
+   - Click **Cancel** during the countdown.
+   - Or click the toolbar icon again to close the menu.
+
+### Advanced Feature: Custom Voice Packs
+
+Create a new folder under `GameData/KSPLaunchCountdown/Lauch Voice/`:
+
+```
+Lauch Voice/
+└── My Rocket/              ← New voice pack name
+    ├── My Rocket.ogg       ← Single-segment: full countdown voice
+    └── preset.cfg          ← Optional configuration file
+```
+
+**Multi-segment format:**
+
+```
+Lauch Voice/
+└── My Rocket/
+    ├── My Rocket-p1.ogg    ← p1: countdown part ("10, 9, 8... 1")
+    ├── My Rocket-p2.ogg    ← p2: after staging ("Ignition! Liftoff!")
+    └── preset.cfg
+```
+
+**preset.cfg format:**
+
+```ini
+COUNTDOWN_PRESET
+{
+    // Delay (seconds) for second staging in single-segment mode
+    // Only effective when "Start engine before separation" is checked
+    singleStageDelay = 2.0
+
+    // Delay (seconds) for second staging in multi-segment mode
+    // How long to wait after p2 starts before second staging
+    multiStageDelay = 0.3
+}
+```
+
+> **Note**: The `startEngineBeforeSeparation` option is controlled only via the UI checkbox, not written to the config file. Different rockets have different staging modes, so this option should be selected manually by the player for each rocket.
+
+## ⚙️ Configuration Parameters
+
+### Global Parameters (defined in code)
+
+| Parameter | Location | Default | Description |
+|-----------|----------|---------|-------------|
+| `UI_RESTORE_DELAY` | CountdownController.cs | 3.0s | Delay after staging before restoring the UI |
+| `audioSource.volume` | AudioPlayer.cs | 1.0 | Countdown voice volume (0.0~1.0) |
+
+### Save-Game Level Parameters (`saves/<save_name>/KSPLaunchCountdown/Settings.cfg`)
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `CountdownVolume` | float | 1.0 | Countdown voice volume (0.0~1.0) |
+
+### Preset Level Parameters (`preset.cfg`)
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `singleStageDelay` | float | 2.0s | Second staging delay in single-segment mode |
+| `multiStageDelay` | float | 0.3s | Second staging delay in multi-segment mode |
+
+## 🐛 Troubleshooting
+
+### Q1: Mod icon not visible on toolbar
+
+**Possible causes**:
+- DLL not placed correctly in GameData.
+- Icon file missing or wrong path.
+- GameDatabase not ready after scene switch (the mod will auto-retry within a few frames).
+
+**Solutions**:
+1. Confirm `KSPLaunchCountdown.dll` is in `GameData/KSPLaunchCountdown/`.
+2. Confirm `icon.png` is in `GameData/KSPLaunchCountdown/Textures/`.
+3. Check KSP debug log for `[KSPLaunchCountdown]` messages.
+4. If the log says "icon load failed... will retry next frame", this is normal; wait 1~2 seconds.
+5. If it keeps failing, restart the game to let GameDatabase rescan resources.
+
+### Q2: Countdown voice not playing
+
+**Possible causes**:
+- Audio file format is wrong (must be .ogg).
+- Audio file path is incorrect.
+- GameDatabase has not scanned the audio file.
+
+**Solutions**:
+1. Confirm the audio file is OGG Vorbis format (.ogg extension).
+2. Confirm the file is in the correct voice pack subdirectory.
+3. Check KSP log for errors.
+4. Restart the game to let GameDatabase rescan resources.
+
+### Q3: Staging does not work
+
+**Possible causes**:
+- Not in flight scene.
+- No active vessel.
+- keybd_event blocked by security software.
+
+**Solutions**:
+1. Confirm you are on the launch pad and the rocket is ready.
+2. Check if another program is intercepting keyboard simulation.
+3. Try pressing the spacebar manually to confirm KSP responds normally.
+
+### Q4: Compile errors about missing KSP types
+
+**Possible causes**:
+- KSP DLLs not referenced correctly.
+- Missing required Unity module DLLs.
+
+**Solution**:
+Copy all required DLLs from `KSP_x64_Data/Managed/` as listed in the `.csproj` file.
+
+## 📄 License
+
+This project is licensed under the [GNU General Public License v3.0 (GPL v3)](./LICENSE).
+
+## 🙏 Acknowledgments
+
+- **KSP Community** - For the excellent game platform and active modding ecosystem.
+- **MechJeb** - For the reference implementation pattern of toolbar buttons.
+- **KSP API Documentation Project** - For the comprehensive API documentation (Classes.xml).
+- **Unity Technologies** - For the powerful game engine.
+
+---
+
+## Author
+
+**Zhu Wenqian** — a 14-year-old boy from China
+
+### Contact
+
+| Method   | Information                                         |
+| -------- | --------------------------------------------------- |
+| Email    | <zhuwenqianchina@outlook.com> / <3784385007@qq.com> |
+| QQ       | 3784385007                                          |
+| Bilibili | `https://space.bilibili.com/1299073087?`       |
+
+---
+
+<div align="center">
+
+**Made with ❤️ for Kerbal Space Program**
+
+*A professional launch experience for Kerbal Space Program*
+
+</div>
+
+---
+
 # KSP Launch Countdown - KSP1 发射倒计时模组
 
 [![KSP Version](https://img.shields.io/badge/KSP-1.12x-blue)](https://www.kerbalspaceprogram.com/)
@@ -566,7 +992,6 @@ KSP模组的所有日志都带有 `[KSPLaunchCountdown]` 前缀，可在以下�
 
 ### 代码规范
 
-- 所有代码注释使用中文
 - 每个文件开头必须包含详细的功能说明注释
 - 遵循现有的命名约定和代码风格
 - 新增功能需要在 `readme/功能更新.md` 中记录
@@ -574,23 +999,6 @@ KSP模组的所有日志都带有 `[KSPLaunchCountdown]` 前缀，可在以下�
 ## 📄 许可证
 
 本项目基于 [GPL v3 License](./LICENSE) 开源。
-
-```
-GNU GENERAL PUBLIC LICENSE
-Version 3, 29 June 2007
-
-Copyright (C) 2026 KSP Launch Countdown Contributors
-
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation, either version 3 of the License, or
-(at your option) any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-GNU General Public License for more details.
-```
 
 ## 🙏 致谢
 
@@ -604,6 +1012,20 @@ GNU General Public License for more details.
 - **问题反馈**: 请通过 [Issues](../../issues) 提交
 - **功能建议**: 请通过 [Discussions](../../discussions) 讨论
 - **开发文档**: 查看 [.trae/documents/ksp-launch-countdown-plan.md](.trae/documents/ksp-launch-countdown-plan.md)
+
+---
+
+## 作者
+
+**Zhu Wenqian** — 一个14岁的中国男孩
+
+### 联系方式
+
+| 方式       | 信息                                                  |
+| -------- | --------------------------------------------------- |
+| Email    | <zhuwenqianchina@outlook.com> / <3784385007@qq.com> |
+| QQ       | 3784385007                                          |
+| Bilibili | `https://space.bilibili.com/1299073087?`       |
 
 ---
 
