@@ -11,7 +11,7 @@
 ### ✨ 核心特性
 
 - **🎯 专业倒计时流程**：完整的发射倒计时序列，模拟真实航天发射程序
-- **🔊 多语音包支持**：内置多种预设语音包（长征一号、长征二号F、土星五号、航天飞机、星舰、西昌、文昌），支持自定义扩展
+- **🔊 多语音包支持**：内置多种预设语音包（长征一号、长征二号F、土星五号、联盟号、SpaceX、航天飞机、星舰、西昌、文昌），支持自定义扩展
 - **🎵 双音频模式**：
   - 单段模式：一个音频文件完成整个倒计时
   - 多段模式（p1/p2）：p1播放倒计时，分级后继续播放p2（如"点火"、"升空"语音）
@@ -98,9 +98,15 @@ KSP Launch Countdown/
 │   │   │   ├── LM-2F(Jiuquan).ogg          #    单段音频
 │   │   │   └── preset.cfg
 │   │   ├── Saturn V/                       #    土星五号语音包
+│   │   ├── Soyuz/                          #    联盟号语音包
+│   │   │   ├── Soyuz.ogg                   #    单段音频
+│   │   │   └── preset.cfg
 │   │   ├── Space shuttle/                  #    航天飞机语音包（多段音频）
 │   │   │   ├── Space shuttle-p1.ogg        #    p1: 倒计时部分
 │   │   │   ├── Space shuttle-p2.ogg        #    p2: 点火后部分
+│   │   │   └── preset.cfg
+│   │   ├── SpaceX/                         #    SpaceX语音包
+│   │   │   ├── SpaceX.ogg                  #    单段音频
 │   │   │   └── preset.cfg
 │   │   ├── Starship/                       #    星舰语音包（多段音频）
 │   │   │   ├── Starship-p1.ogg             #    p1: 倒计时部分
@@ -204,7 +210,9 @@ KSP Launch Countdown/
            │   ├── LM-1(70s Jiuquan)/
            │   ├── LM-2F(Jiuquan)/
            │   ├── Saturn V/
+           │   ├── Soyuz/
            │   ├── Space shuttle/
+           │   ├── SpaceX/
            │   ├── Starship/
            │   ├── Wenchang/
            │   └── Xichang/
@@ -269,7 +277,9 @@ dotnet build -c Release
      - **LM-1(70s Jiuquan)**: 长征一号（70年代酒泉）中文语音
      - **LM-2F(Jiuquan)**: 长征二号F（酒泉）中文语音
      - **Saturn V**: 土星五号英文语音
+     - **Soyuz**: 联盟号俄文语音
      - **Space shuttle**: 航天飞机英文语音（多段）
+     - **SpaceX**: SpaceX英文语音
      - **Starship**: SpaceX星舰英文语音（多段）
      - **Wenchang**: 文昌发射场中文语音
      - **Xichang**: 西昌发射场中文语音

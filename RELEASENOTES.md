@@ -8,8 +8,12 @@
 
 ### New Voice Presets
 
+- **Soyuz** (`Soyuz/`)
+  - Single-segment countdown audio with `singleStageDelay = 3.0` seconds.
 - **Space Shuttle** (`Space shuttle/`)
   - Multi-segment (p1/p2) countdown audio with `multiStageDelay = 2` seconds.
+- **SpaceX** (`SpaceX/`)
+  - Single-segment countdown audio with `singleStageDelay = 1.0` second.
 - **Wenchang** (`Wenchang/`)
   - Single-segment countdown audio with `singleStageDelay = 1.0` second.
 - **Xichang** (`Xichang/`)
