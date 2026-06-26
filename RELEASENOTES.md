@@ -4,6 +4,38 @@
 
 ---
 
+## v0.2.1 - Unreleased
+
+### New Voice Presets
+
+- **Space Shuttle** (`Space shuttle/`)
+  - Multi-segment (p1/p2) countdown audio with `multiStageDelay = 2` seconds.
+- **Wenchang** (`Wenchang/`)
+  - Single-segment countdown audio with `singleStageDelay = 1.0` second.
+- **Xichang** (`Xichang/`)
+  - Single-segment countdown audio with `singleStageDelay = 0.5` second.
+
+### Voice Preset Renames
+
+- Renamed `DFH-1` → `LM-1(70s Jiuquan)` for clearer identification.
+- Renamed `Shenzhou Series` → `LM-2F(Jiuquan)` for clearer identification.
+
+### Improvements
+
+#### Improved Engine-Ignition Detection
+- `LaunchSafetyChecker.IsAnyEngineRunning()` now detects engines that are ignited even when throttle is 0.
+- Detection condition changed from `finalThrust > 0.01f` to `EngineIgnited || finalThrust > 0.01f`.
+- This correctly identifies a manually ignited engine with zero throttle, preventing premature throttle-up during countdown.
+
+#### Refined Engine-Already-Running Strategy
+- When the core-stage engine is already running:
+  - Throttle is held at 0% during the countdown audio.
+  - At the end of the audio, throttle is set to 100%.
+  - If the **"Start engine before separation"** checkbox is enabled, the mod will perform staging after the configured delay.
+  - If the checkbox is **not** enabled, no automatic staging is performed; separation remains under player control.
+
+---
+
 ## v0.2.0 - June 22, 2026
 
 ### New Features
