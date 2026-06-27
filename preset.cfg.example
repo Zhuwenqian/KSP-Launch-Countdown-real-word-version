@@ -1,0 +1,5 @@
+COUNTDOWN_PRESET
+{
+    singleStageDelay = 2.0
+    multiStageDelay = 0.3
+}
