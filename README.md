@@ -331,17 +331,24 @@ Lauch Voice/
 ```ini
 COUNTDOWN_PRESET
 {
-    // Delay (seconds) for second staging in single-segment mode
+    // Delay (seconds) for second staging in single-segment mode (Stock)
     // Only effective when "Start engine before separation" is checked
     singleStageDelay = 2.0
 
-    // Delay (seconds) for second staging in multi-segment mode
+    // Delay (seconds) for second staging in multi-segment mode (Stock)
     // How long to wait after p2 starts before second staging
     multiStageDelay = 0.3
+
+    // Delay (seconds) for second staging in single-segment mode (Realism Overhaul)
+    // Automatically used when RO is installed; allows more time for engine spool-up
+    roSingleStageDelay = 5.0
+
+    // Delay (seconds) for second staging in multi-segment mode (Realism Overhaul)
+    roMultiStageDelay = 3.0
 }
 ```
 
-> **Note**: The `startEngineBeforeSeparation` option is controlled only via the UI checkbox, not written to the config file. Different rockets have different staging modes, so this option should be selected manually by the player for each rocket.
+> **Note**: The `startEngineBeforeSeparation` option is controlled only via the UI checkbox, not written to the config file. Different rockets have different staging modes, so this option should be selected manually by the player for each rocket. When Realism Overhaul is installed, the RO-specific delays are used and can be further adjusted via the global "RO Delay Multiplier" slider in the UI.
 
 ## ⚙️ Configuration Parameters
 
@@ -362,8 +369,12 @@ COUNTDOWN_PRESET
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `singleStageDelay` | float | 2.0s | Second staging delay in single-segment mode |
-| `multiStageDelay` | float | 0.3s | Second staging delay in multi-segment mode |
+| `singleStageDelay` | float | 2.0s | Second staging delay in single-segment mode (Stock) |
+| `multiStageDelay` | float | 0.3s | Second staging delay in multi-segment mode (Stock) |
+| `roSingleStageDelay` | float | 5.0s | Second staging delay in single-segment mode (Realism Overhaul) |
+| `roMultiStageDelay` | float | 3.0s | Second staging delay in multi-segment mode (Realism Overhaul) |
+
+> **Global RO Delay Multiplier**: When Realism Overhaul is installed, the final RO delay is calculated as `roDelay * multiplier`. The multiplier can be adjusted in the in-game UI (range 0.1x ~ 3.0x, default 1.0x) and is saved per-save.
 
 ## 🐛 Troubleshooting
 
@@ -815,17 +826,24 @@ Lauch Voice/
 ```ini
 COUNTDOWN_PRESET
 {
-    // 单段模式下第二次分级的延迟时间（秒）
+    // Stock 环境下单段模式下第二次分级的延迟时间（秒）
     // 仅当勾选"先启动发动机再分离"时生效
     singleStageDelay = 2.0
 
-    // 多段模式下第二次分级的延迟时间（秒）
+    // Stock 环境下多段模式下第二次分级的延迟时间（秒）
     // p2开始播放后等待多久执行第二次分级
     multiStageDelay = 0.3
+
+    // RO（Realism Overhaul）环境下单段模式的第二次分级延迟（秒）
+    // 安装 RO 后自动生效，给发动机更长时间达到推力
+    roSingleStageDelay = 5.0
+
+    // RO（Realism Overhaul）环境下多段模式的第二次分级延迟（秒）
+    roMultiStageDelay = 3.0
 }
 ```
 
-> **注意**：`startEngineBeforeSeparation` 选项仅在UI上勾选控制，不写入配置文件。因为不同火箭的分级模式各不相同，此选项应由玩家根据当前火箭手动选择。
+> **注意**：`startEngineBeforeSeparation` 选项仅在UI上勾选控制，不写入配置文件。因为不同火箭的分级模式各不相同，此选项应由玩家根据当前火箭手动选择。安装 Realism Overhaul 后，会自动使用 RO 专用延迟，并可通过界面上的"RO 延迟倍数"滑块进行全局微调。
 
 ## ⚙️ 配置参数说明
 
@@ -846,8 +864,12 @@ COUNTDOWN_PRESET
 
 | 参数 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| `singleStageDelay` | float | 2.0秒 | 单段模式第二次分级延迟 |
-| `multiStageDelay` | float | 0.3秒 | 多段模式第二次分级延迟 |
+| `singleStageDelay` | float | 2.0秒 | Stock 单段模式第二次分级延迟 |
+| `multiStageDelay` | float | 0.3秒 | Stock 多段模式第二次分级延迟 |
+| `roSingleStageDelay` | float | 5.0秒 | RO 单段模式第二次分级延迟 |
+| `roMultiStageDelay` | float | 3.0秒 | RO 多段模式第二次分级延迟 |
+
+> **全局 RO 延迟倍数**：安装 Realism Overhaul 后，最终 RO 延迟计算公式为 `roDelay * multiplier`。倍数可在游戏内 UI 调整（范围 0.1x ~ 3.0x，默认 1.0x），并按存档保存。
 
 ## 🔧 开发指南
 

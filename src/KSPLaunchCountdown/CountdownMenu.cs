@@ -3,6 +3,7 @@
  *
  * 用途：提供倒计时控制的图形界面，包括预设选择、发射按钮和设置选项。
  * 使用Unity IMGUI系统（OnGUI + GUILayout.Window）绘制菜单窗口。
+ * 安装 Realism Overhaul（RO）时，额外显示 RO 模式状态与全局延迟倍率滑块。
  *
  * 菜单布局：
  *   ┌──────────────────────────────┐
@@ -11,6 +12,8 @@
  *   │ 预设: [DFH-1           ▼]   │
  *   │ ☑ 先启动发动机再分离          │
  *   │ 音量: [──────●────] 50%      │
+ *   │ RO 模式已启用                │
+ *   │ RO 延迟倍数: [─●────] 1.0x   │
  *   │                              │
  *   │ ⚠ 发射前检查未通过            │
  *   │   • 不在发射台               │
@@ -74,7 +77,8 @@ namespace KSPLaunchCountdown
         private bool isVisible = false;
 
         /// <summary>菜单窗口的位置和大小</summary>
-        private Rect windowRect = new Rect(200f, 200f, 300f, 260f);
+        /// 高度从 260 增加到 320，为 RO 模式状态与延迟倍率滑块预留空间
+        private Rect windowRect = new Rect(200f, 200f, 300f, 320f);
 
         /// <summary>当前选中的预设索引</summary>
         private int selectedPresetIndex = 0;
@@ -251,6 +255,12 @@ namespace KSPLaunchCountdown
 
             GUILayout.Space(5f);
 
+            // RO 模式显示与全局延迟倍率滑块
+            // 仅在检测到 Realism Overhaul 安装时显示，避免干扰 Stock 玩家
+            DrawRODelayMultiplierSlider();
+
+            GUILayout.Space(5f);
+
             // 安全检查警告区域
             // 当上次安全检查未通过时显示失败原因和强制发射选项
             DrawSafetyWarning();
@@ -317,6 +327,42 @@ namespace KSPLaunchCountdown
                 {
                     audioPlayer.Volume = newVolume;
                 }
+            }
+        }
+
+        /// <summary>
+        /// 绘制 RO 延迟倍率滑块
+        /// 仅在检测到 Realism Overhaul 安装时显示，用于全局微调 RO 环境下的分级延迟
+        /// 滑块范围 0.1x ~ 3.0x，默认值 1.0x
+        /// </summary>
+        private void DrawRODelayMultiplierSlider()
+        {
+            if (settingsManager == null) return;
+
+            // 未安装 RO 时不显示此控件，避免干扰 Stock 玩家
+            if (!ROAdapter.IsROInstalled) return;
+
+            // 显示 RO 模式已启用标签
+            GUILayout.Label(localization.GetString(Localization.Keys.ROModeEnabled));
+
+            // 当前倍率显示（保留一位小数）
+            float currentMultiplier = settingsManager.RODelayMultiplier;
+
+            GUILayout.BeginHorizontal();
+            GUILayout.Label(localization.GetString(Localization.Keys.RODelayMultiplierLabel, currentMultiplier.ToString("F1")), GUILayout.Width(140f));
+
+            // 滑块范围 0.1~3.0
+            float newMultiplier = GUILayout.HorizontalSlider(
+                currentMultiplier,
+                0.1f,
+                3.0f
+            );
+            GUILayout.EndHorizontal();
+
+            // 只在倍率变化时更新（避免每帧重复保存）
+            if (Mathf.Abs(newMultiplier - currentMultiplier) > 0.001f)
+            {
+                settingsManager.RODelayMultiplier = newMultiplier;
             }
         }
 

@@ -25,17 +25,22 @@
  * 配置文件 preset.cfg 格式（ModuleManager兼容）：
  *   COUNTDOWN_PRESET
  *   {
- *       singleStageDelay = 2.0              // 单段模式下第二次分级的延迟（秒）
- *       multiStageDelay = 0.3               // 多段模式下第二次分级的延迟（秒）
+ *       singleStageDelay = 2.0              // Stock 单段模式下第二次分级的延迟（秒）
+ *       multiStageDelay = 0.3               // Stock 多段模式下第二次分级的延迟（秒）
+ *
+ *       roSingleStageDelay = 5.0            // RO 单段模式下第二次分级的延迟（秒）
+ *       roMultiStageDelay = 3.0             // RO 多段模式下第二次分级的延迟（秒）
  *   }
  *
  *   注意：startEngineBeforeSeparation 选项仅在UI上勾选，不写入配置文件。
  *   配置文件中的延迟时间参数仅在UI勾选"先启动发动机再分离"时才生效，
  *   因为不同火箭的分级模式各不相同，延迟时间需要按语音包/火箭类型调整。
+ *   RO 字段仅在 ROAdapter 检测到 Realism Overhaul 安装时生效，否则使用 Stock 字段。
  *
  * 依赖：
  *   - Assembly-CSharp.dll (KSP核心，提供KSPUtil、ConfigNode等)
  *   - UnityEngine.CoreModule.dll (Unity核心，提供Debug日志)
+ *   - ROAdapter.cs (RO 环境检测)
  */
 
 using System;
@@ -84,6 +89,45 @@ namespace KSPLaunchCountdown
         /// <summary>多段模式下第二次分级的延迟时间（秒）
         /// 可调整参数：p2开始播放后等待多久执行第二次分级</summary>
         public float MultiStageDelay { get; set; } = 0.3f;
+
+        /// <summary>
+        /// RO（Realism Overhaul）环境下单段模式的第二次分级延迟（秒）
+        /// 可调整参数：RO 发动机点火到满推力需要更长时间，默认值 5.0 秒比 Stock 更长，
+        /// 防止火箭在推力未建立时过早分离落回地面
+        /// </summary>
+        public float RoSingleStageDelay { get; set; } = 5.0f;
+
+        /// <summary>
+        /// RO（Realism Overhaul）环境下多段模式的第二次分级延迟（秒）
+        /// 可调整参数：p2 开始播放后等待多久执行第二次分级，默认值 3.0 秒
+        /// </summary>
+        public float RoMultiStageDelay { get; set; } = 3.0f;
+
+        /// <summary>
+        /// 获取实际使用的单段模式延迟
+        /// 根据是否安装 RO 选择 Stock 或 RO 基准值，再乘以全局倍率
+        /// </summary>
+        /// <param name="roInstalled">是否检测到 RO 安装</param>
+        /// <param name="multiplier">全局延迟倍率</param>
+        /// <returns>实际延迟时间（秒），最小 0.1 秒</returns>
+        public float GetEffectiveSingleStageDelay(bool roInstalled, float multiplier)
+        {
+            float baseDelay = roInstalled ? RoSingleStageDelay : SingleStageDelay;
+            return Mathf.Max(0.1f, baseDelay * multiplier);
+        }
+
+        /// <summary>
+        /// 获取实际使用的多段模式延迟
+        /// 根据是否安装 RO 选择 Stock 或 RO 基准值，再乘以全局倍率
+        /// </summary>
+        /// <param name="roInstalled">是否检测到 RO 安装</param>
+        /// <param name="multiplier">全局延迟倍率</param>
+        /// <returns>实际延迟时间（秒），最小 0.05 秒</returns>
+        public float GetEffectiveMultiStageDelay(bool roInstalled, float multiplier)
+        {
+            float baseDelay = roInstalled ? RoMultiStageDelay : MultiStageDelay;
+            return Mathf.Max(0.05f, baseDelay * multiplier);
+        }
     }
 
     /// <summary>
@@ -221,10 +265,13 @@ namespace KSPLaunchCountdown
         /// {
         ///     singleStageDelay = 2.0
         ///     multiStageDelay = 0.3
+        ///     roSingleStageDelay = 5.0
+        ///     roMultiStageDelay = 3.0
         /// }
         /// 
         /// 注意：startEngineBeforeSeparation 仅在UI上勾选，不写入配置文件。
         /// 延迟时间参数仅在UI勾选"先启动发动机再分离"时才生效。
+        /// RO 字段在检测到 Realism Overhaul 时生效，未安装 RO 时忽略。
         /// </summary>
         /// <param name="preset">要加载配置的预设对象</param>
         /// <param name="directoryPath">预设目录的完整路径</param>
@@ -274,6 +321,22 @@ namespace KSPLaunchCountdown
                 {
                     preset.MultiStageDelay = Mathf.Max(0.05f, multiDelay);
                     Debug.Log($"{LOG_TAG} 预设 '{preset.Name}' 配置: multiStageDelay={preset.MultiStageDelay}");
+                }
+
+                // roSingleStageDelay: RO 环境下单段模式的第二次分级延迟（秒）
+                float roSingleDelay = 0f;
+                if (node.TryGetValue("roSingleStageDelay", ref roSingleDelay))
+                {
+                    preset.RoSingleStageDelay = Mathf.Max(0.1f, roSingleDelay);
+                    Debug.Log($"{LOG_TAG} 预设 '{preset.Name}' 配置: roSingleStageDelay={preset.RoSingleStageDelay}");
+                }
+
+                // roMultiStageDelay: RO 环境下多段模式的第二次分级延迟（秒）
+                float roMultiDelay = 0f;
+                if (node.TryGetValue("roMultiStageDelay", ref roMultiDelay))
+                {
+                    preset.RoMultiStageDelay = Mathf.Max(0.05f, roMultiDelay);
+                    Debug.Log($"{LOG_TAG} 预设 '{preset.Name}' 配置: roMultiStageDelay={preset.RoMultiStageDelay}");
                 }
             }
             catch (Exception ex)

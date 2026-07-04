@@ -90,6 +90,8 @@ namespace KSPLaunchCountdown
             public const string SafetyCheckLowElectricCharge = "#KSPLaunchCountdown_SafetyCheckLowElectricCharge";
             public const string ForceLaunchButton = "#KSPLaunchCountdown_ForceLaunchButton";
             public const string AbortLaunchButton = "#KSPLaunchCountdown_AbortLaunchButton";
+            public const string ROModeEnabled = "#KSPLaunchCountdown_ROModeEnabled";
+            public const string RODelayMultiplierLabel = "#KSPLaunchCountdown_RODelayMultiplierLabel";
         }
 
         /// <summary>

@@ -9,13 +9,15 @@
  *   1. 在飞行场景加载时启动（KSPAddon.Startup.Flight）
  *   2. 初始化所有子模块：SettingsManager、Localization、PresetManager、
  *      AudioPlayer、LaunchSequence、CountdownController、CountdownMenu、ToolbarButton
- *   3. 在场景切换或模组卸载时清理所有资源
+ *   3. 触发 ROAdapter 检测 Realism Overhaul 是否安装
+ *   4. 在场景切换或模组卸载时清理所有资源
  *
  * 依赖：
  *   - Assembly-CSharp.dll (KSP核心，提供KSPAddon、MonoBehaviour、GameEvents等)
  *   - UnityEngine.CoreModule.dll (Unity核心，提供MonoBehaviour基类)
  *   - SettingsManager.cs (设置管理)
  *   - Localization.cs (多语言支持)
+ *   - ROAdapter.cs (RO 环境检测)
  *
  * KSP加载机制：
  *   KSP通过 [KSPAddon] 特性自动发现和加载模组类，
@@ -98,9 +100,13 @@ namespace KSPLaunchCountdown
             // 初始化发射序列执行器（需要访问FlightGlobals，挂载到同一GameObject）
             launchSequence = gameObject.AddComponent<LaunchSequence>();
 
+            // 触发 RO 环境检测，结果会缓存到 ROAdapter 中供后续模块使用
+            bool roInstalled = ROAdapter.IsROInstalled;
+            Debug.Log($"[KSPLaunchCountdown] 模组入口: RO安装状态={roInstalled}");
+
             // 初始化倒计时控制器（协调音频和发射序列，挂载到同一GameObject）
             countdownController = gameObject.AddComponent<CountdownController>();
-            countdownController.Initialize(audioPlayer, launchSequence, localization);
+            countdownController.Initialize(audioPlayer, launchSequence, localization, settingsManager);
 
             // 初始化倒计时菜单UI（需要OnGUI，挂载到同一GameObject）
             countdownMenu = gameObject.AddComponent<CountdownMenu>();

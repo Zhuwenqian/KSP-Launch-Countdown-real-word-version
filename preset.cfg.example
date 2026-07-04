@@ -1,5 +1,11 @@
 COUNTDOWN_PRESET
 {
+    // Stock 环境下的延迟
     singleStageDelay = 2.0
     multiStageDelay = 0.3
+
+    // RO（Realism Overhaul）环境下的延迟
+    // 安装 RO 后自动生效，发动机点火到满推力需要更长时间
+    roSingleStageDelay = 5.0
+    roMultiStageDelay = 3.0
 }

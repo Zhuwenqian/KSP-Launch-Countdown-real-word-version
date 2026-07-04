@@ -3,8 +3,16 @@
  *
  * 用途：倒计时的核心控制逻辑，协调音频播放和发射序列的执行。
  * 支持单段和多段音频模式、"先启动发动机再分离"功能、
- * 根据发射前安全检查结果的"先点火后放行"策略，
- * 以及发射前SAS开启的多次尝试和异常处理。
+ * 根据发射前安全检查结果的"先点火后放行"策略、
+ * 发射前SAS开启的多次尝试和异常处理，
+ * 以及 Realism Overhaul（RO）环境下的自动点火延迟适配。
+ *
+ * RO 适配说明：
+ *   当 ROAdapter 检测到 Realism Overhaul 安装时，
+ *   倒计时控制器会自动使用预设中的 RO 专用延迟（roSingleStageDelay / roMultiStageDelay），
+ *   再乘以 SettingsManager 中的全局 RO 延迟倍率，作为最终的分级等待时间。
+ *   未安装 RO 时，继续使用 Stock 延迟（singleStageDelay / multiStageDelay），
+ *   全局倍率不会影响 Stock 延迟。
  *
  * 发射流程（单段音频模式，发动机未启动）：
  *   1. 隐藏游戏UI
@@ -52,6 +60,8 @@
  *   - KSPApiHelper.cs (KSP API反射辅助类)
  *   - Localization.cs (多语言支持)
  *   - LaunchSafetyChecker.cs (发射前安全检查)
+ *   - ROAdapter.cs (RO 环境检测)
+ *   - SettingsManager.cs (全局 RO 延迟倍率)
  */
 
 using System.Collections;
@@ -83,6 +93,9 @@ namespace KSPLaunchCountdown
 
         /// <summary>本地化系统引用</summary>
         private Localization localization;
+
+        /// <summary>设置管理器引用，用于读取全局 RO 延迟倍率</summary>
+        private SettingsManager settingsManager;
 
         /// <summary>当前是否正在执行倒计时序列</summary>
         private bool isCountingDown = false;
@@ -116,13 +129,18 @@ namespace KSPLaunchCountdown
         public bool IsCountingDown => isCountingDown;
 
         /// <summary>
-        /// 初始化控制器，注入依赖的音频播放器、发射序列执行器和本地化系统
+        /// 初始化控制器，注入依赖的音频播放器、发射序列执行器、本地化系统和设置管理器
         /// </summary>
-        public void Initialize(AudioPlayer player, LaunchSequence sequence, Localization loc)
+        /// <param name="player">音频播放器</param>
+        /// <param name="sequence">发射序列执行器</param>
+        /// <param name="loc">本地化系统</param>
+        /// <param name="settings">设置管理器，用于读取 RO 延迟倍率</param>
+        public void Initialize(AudioPlayer player, LaunchSequence sequence, Localization loc, SettingsManager settings)
         {
             audioPlayer = player;
             launchSequence = sequence;
             localization = loc;
+            settingsManager = settings;
             audioPlayer.OnAudioFinished += OnAudioPlaybackFinished;
         }
 
@@ -239,12 +257,13 @@ namespace KSPLaunchCountdown
                 launchSequence.SetFullThrottle();
                 yield return null;
 
-                // 若勾选了"先启动发动机再分离"，按配置文件中的延迟执行放行分级
+                // 若勾选了"先启动发动机再分离"，按有效延迟执行放行分级
                 if (preset.StartEngineBeforeSeparation)
                 {
-                    Debug.Log($"{LOG_TAG} 等待 {preset.SingleStageDelay} 秒后执行放行分级");
+                    float delay = preset.GetEffectiveSingleStageDelay(ROAdapter.IsROInstalled, settingsManager.RODelayMultiplier);
+                    Debug.Log($"{LOG_TAG} RO模式={ROAdapter.IsROInstalled}, 倍率={settingsManager.RODelayMultiplier:F2}x, 等待 {delay:F2} 秒后执行放行分级");
                     float elapsed = 0f;
-                    while (elapsed < preset.SingleStageDelay && !isCancelled)
+                    while (elapsed < delay && !isCancelled)
                     {
                         elapsed += UnityEngine.Time.deltaTime;
                         yield return null;
@@ -266,12 +285,13 @@ namespace KSPLaunchCountdown
                 Debug.Log($"{LOG_TAG} 执行分级");
                 launchSequence.ActivateNextStage();
 
-                // 步骤7：若启用"先启动发动机再分离"，等待延迟后第二次分级
+                // 步骤7：若启用"先启动发动机再分离"，等待有效延迟后第二次分级
                 if (preset.StartEngineBeforeSeparation)
                 {
-                    Debug.Log($"{LOG_TAG} 等待 {preset.SingleStageDelay} 秒后执行第二次分级");
+                    float delay = preset.GetEffectiveSingleStageDelay(ROAdapter.IsROInstalled, settingsManager.RODelayMultiplier);
+                    Debug.Log($"{LOG_TAG} RO模式={ROAdapter.IsROInstalled}, 倍率={settingsManager.RODelayMultiplier:F2}x, 等待 {delay:F2} 秒后执行第二次分级");
                     float elapsed = 0f;
-                    while (elapsed < preset.SingleStageDelay && !isCancelled)
+                    while (elapsed < delay && !isCancelled)
                     {
                         elapsed += UnityEngine.Time.deltaTime;
                         yield return null;
@@ -321,12 +341,13 @@ namespace KSPLaunchCountdown
                 launchSequence.SetFullThrottle();
                 yield return null;
 
-                // 若勾选了"先启动发动机再分离"，按配置文件中的延迟执行放行分级
+                // 若勾选了"先启动发动机再分离"，按有效延迟执行放行分级
                 if (preset.StartEngineBeforeSeparation)
                 {
-                    Debug.Log($"{LOG_TAG} 等待 {preset.MultiStageDelay} 秒后执行放行分级");
+                    float delay = preset.GetEffectiveMultiStageDelay(ROAdapter.IsROInstalled, settingsManager.RODelayMultiplier);
+                    Debug.Log($"{LOG_TAG} RO模式={ROAdapter.IsROInstalled}, 倍率={settingsManager.RODelayMultiplier:F2}x, 等待 {delay:F2} 秒后执行放行分级");
                     float elapsed = 0f;
-                    while (elapsed < preset.MultiStageDelay && !isCancelled)
+                    while (elapsed < delay && !isCancelled)
                     {
                         elapsed += UnityEngine.Time.deltaTime;
                         yield return null;
@@ -355,13 +376,14 @@ namespace KSPLaunchCountdown
             yield return null;
 
             // 步骤8：若发动机未启动且启用"先启动发动机再分离"，
-            // p2开始后等待延迟执行第二次分级
+            // p2开始后等待有效延迟执行第二次分级
             if (!(lastSafetyCheckResult != null && lastSafetyCheckResult.EngineAlreadyRunning) &&
                 preset.StartEngineBeforeSeparation)
             {
-                Debug.Log($"{LOG_TAG} p2开始播放，等待 {preset.MultiStageDelay} 秒后执行第二次分级");
+                float delay = preset.GetEffectiveMultiStageDelay(ROAdapter.IsROInstalled, settingsManager.RODelayMultiplier);
+                Debug.Log($"{LOG_TAG} RO模式={ROAdapter.IsROInstalled}, 倍率={settingsManager.RODelayMultiplier:F2}x, p2开始播放，等待 {delay:F2} 秒后执行第二次分级");
                 float elapsed = 0f;
-                while (elapsed < preset.MultiStageDelay && !isCancelled)
+                while (elapsed < delay && !isCancelled)
                 {
                     elapsed += UnityEngine.Time.deltaTime;
                     yield return null;
