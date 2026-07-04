@@ -63,6 +63,8 @@ For the best launch countdown experience, the following mods are recommended:
 - **KCDE (KIU Chinese Deepspace Exploration Pack)** — Chinese deep-space exploration parts: [SpaceDock](https://spacedock.info/mod/3142/KCDE%20(KIU%20Chinese%20Deepspace%20Exploration%20Pack))
 - **Starship Expansion Project - SEP** — SpaceX Starship parts: [SpaceDock](https://spacedock.info/mod/2959/Starship%20Expansion%20Project%20-%20SEP)
 - **Kerwis Chinese Aerospace Pack (KCAP)** — Chinese aerospace parts: [SpaceDock](https://spacedock.info/mod/2867/Kerwis%20Chinese%20Aerospace%20Pack%20(KCAP))
+- RO Series
+- Real Solar System
 
 ### Author
 
@@ -135,6 +137,8 @@ GPL v3
 - **KCDE (KIU Chinese Deepspace Exploration Pack)** — 中国深空探测包：[SpaceDock](https://spacedock.info/mod/3142/KCDE%20(KIU%20Chinese%20Deepspace%20Exploration%20Pack))
 - **Starship Expansion Project - SEP** — SpaceX 星舰扩展包：[SpaceDock](https://spacedock.info/mod/2959/Starship%20Expansion%20Project%20-%20SEP)
 - **Kerwis Chinese Aerospace Pack (KCAP)** — Kerwis 中国航空航天包：[SpaceDock](https://spacedock.info/mod/2867/Kerwis%20Chinese%20Aerospace%20Pack%20(KCAP))
+- RO Series
+- Real Solar System
 
 ### 作者
 

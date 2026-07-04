@@ -741,6 +741,10 @@ dotnet build -c Release
 | **KCDE** | KIU 中国深空探测包 | [SpaceDock](https://spacedock.info/mod/3142/KCDE%20(KIU%20Chinese%20Deepspace%20Exploration%20Pack)) |
 | **SEP** | Starship Expansion Project（星舰扩展包） | [SpaceDock](https://spacedock.info/mod/2959/Starship%20Expansion%20Project%20-%20SEP) |
 | **KCAP** | Kerwis 中国航空航天包 | [SpaceDock](https://spacedock.info/mod/2867/Kerwis%20Chinese%20Aerospace%20Pack%20(KCAP)) |
+| **RO Series** |
+| **Real Solar System** |
+
+
 
 ## 🎮 使用教程
 
