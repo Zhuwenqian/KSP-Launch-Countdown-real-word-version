@@ -253,6 +253,18 @@ dotnet build -c Release
 # KSP GameData/KSPLaunchCountdown/
 ```
 
+## 🔗 Recommended Mods
+
+For the best launch countdown experience, the following mods are recommended:
+
+| Mod | Description | Link |
+|-----|-------------|------|
+| **KCLV** | KIU Chinese Launch Vehicle Pack | [SpaceDock](https://spacedock.info/mod/3143/KCLV%20(KIU%20Chinese%20Launch%20Vehicle%20Pack)) |
+| **KCHS** | KIU Chinese Human Spaceflight Pack | [SpaceDock](https://spacedock.info/mod/3144/KCHS%20(KIU%20Chinese%20Human%20Spaceflight%20Pack)) |
+| **KCDE** | KIU Chinese Deepspace Exploration Pack | [SpaceDock](https://spacedock.info/mod/3142/KCDE%20(KIU%20Chinese%20Deepspace%20Exploration%20Pack)) |
+| **SEP** | Starship Expansion Project | [SpaceDock](https://spacedock.info/mod/2959/Starship%20Expansion%20Project%20-%20SEP) |
+| **KCAP** | Kerwis Chinese Aerospace Pack | [SpaceDock](https://spacedock.info/mod/2867/Kerwis%20Chinese%20Aerospace%20Pack%20(KCAP)) |
+
 ## 🎮 User Guide
 
 ### Basic Usage
@@ -717,6 +729,18 @@ dotnet build -c Release
 # 将 build/Release/net472/KSPLaunchCountdown.dll 复制到
 # KSP GameData/KSPLaunchCountdown/ 目录下
 ```
+
+## 🔗 推荐搭配模组
+
+为了获得更完整的发射倒计时体验，推荐搭配以下模组使用：
+
+| 模组 | 说明 | 链接 |
+|------|------|------|
+| **KCLV** | KIU 中国长征系列运载火箭包 | [SpaceDock](https://spacedock.info/mod/3143/KCLV%20(KIU%20Chinese%20Launch%20Vehicle%20Pack)) |
+| **KCHS** | KIU 中国载人航天器包 | [SpaceDock](https://spacedock.info/mod/3144/KCHS%20(KIU%20Chinese%20Human%20Spaceflight%20Pack)) |
+| **KCDE** | KIU 中国深空探测包 | [SpaceDock](https://spacedock.info/mod/3142/KCDE%20(KIU%20Chinese%20Deepspace%20Exploration%20Pack)) |
+| **SEP** | Starship Expansion Project（星舰扩展包） | [SpaceDock](https://spacedock.info/mod/2959/Starship%20Expansion%20Project%20-%20SEP) |
+| **KCAP** | Kerwis 中国航空航天包 | [SpaceDock](https://spacedock.info/mod/2867/Kerwis%20Chinese%20Aerospace%20Pack%20(KCAP)) |
 
 ## 🎮 使用教程
 

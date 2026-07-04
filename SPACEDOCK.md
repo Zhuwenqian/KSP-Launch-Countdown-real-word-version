@@ -54,6 +54,16 @@
 
 GPL v3
 
+### Recommended Mods
+
+For the best launch countdown experience, the following mods are recommended:
+
+- **KCLV (KIU Chinese Launch Vehicle Pack)** — Chinese launch vehicles: [SpaceDock](https://spacedock.info/mod/3143/KCLV%20(KIU%20Chinese%20Launch%20Vehicle%20Pack))
+- **KCHS (KIU Chinese Human Spaceflight Pack)** — Chinese human spaceflight parts: [SpaceDock](https://spacedock.info/mod/3144/KCHS%20(KIU%20Chinese%20Human%20Spaceflight%20Pack))
+- **KCDE (KIU Chinese Deepspace Exploration Pack)** — Chinese deep-space exploration parts: [SpaceDock](https://spacedock.info/mod/3142/KCDE%20(KIU%20Chinese%20Deepspace%20Exploration%20Pack))
+- **Starship Expansion Project - SEP** — SpaceX Starship parts: [SpaceDock](https://spacedock.info/mod/2959/Starship%20Expansion%20Project%20-%20SEP)
+- **Kerwis Chinese Aerospace Pack (KCAP)** — Chinese aerospace parts: [SpaceDock](https://spacedock.info/mod/2867/Kerwis%20Chinese%20Aerospace%20Pack%20(KCAP))
+
 ### Author
 
 **Zhu Wenqian** — a 14-year-old boy from China
@@ -115,6 +125,16 @@ GPL v3
 ### 许可证
 
 GPL v3
+
+### 推荐搭配模组
+
+为了获得更完整的发射倒计时体验，推荐搭配以下模组使用：
+
+- **KCLV (KIU Chinese Launch Vehicle Pack)** — 中国长征系列运载火箭包：[SpaceDock](https://spacedock.info/mod/3143/KCLV%20(KIU%20Chinese%20Launch%20Vehicle%20Pack))
+- **KCHS (KIU Chinese Human Spaceflight Pack)** — 中国载人航天器包：[SpaceDock](https://spacedock.info/mod/3144/KCHS%20(KIU%20Chinese%20Human%20Spaceflight%20Pack))
+- **KCDE (KIU Chinese Deepspace Exploration Pack)** — 中国深空探测包：[SpaceDock](https://spacedock.info/mod/3142/KCDE%20(KIU%20Chinese%20Deepspace%20Exploration%20Pack))
+- **Starship Expansion Project - SEP** — SpaceX 星舰扩展包：[SpaceDock](https://spacedock.info/mod/2959/Starship%20Expansion%20Project%20-%20SEP)
+- **Kerwis Chinese Aerospace Pack (KCAP)** — Kerwis 中国航空航天包：[SpaceDock](https://spacedock.info/mod/2867/Kerwis%20Chinese%20Aerospace%20Pack%20(KCAP))
 
 ### 作者
 
