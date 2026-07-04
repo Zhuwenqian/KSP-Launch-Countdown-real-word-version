@@ -1,0 +1,31 @@
+{
+    "spec_version": "v1.34",
+    "identifier": "KSPLaunchCountdown",
+    "name": "KSP Launch Countdown",
+    "abstract": "A professional launch countdown mod for Kerbal Space Program 1, featuring voice announcements, automated launch sequence, volume control, multi-language UI and pre-launch safety checks.",
+    "author": "ZhuWenqian",
+    "version": "0.2.1",
+    "ksp_version_min": "1.12.0",
+    "ksp_version_max": "1.12.99",
+    "license": "GPL-3.0",
+    "release_status": "stable",
+    "resources": {
+        "homepage": "https://github.com/ZhuWenqian/KSPLaunchCountdown",
+        "repository": "https://github.com/ZhuWenqian/KSPLaunchCountdown",
+        "bugtracker": "https://github.com/ZhuWenqian/KSPLaunchCountdown/issues",
+        "spacedock": "https://spacedock.info/mod/KSPLaunchCountdown"
+    },
+    "tags": [
+        "plugin",
+        "sound",
+        "utility",
+        "config"
+    ],
+    "install": [
+        {
+            "find": "KSPLaunchCountdown",
+            "install_to": "GameData"
+        }
+    ],
+    "download": "https://github.com/ZhuWenqian/KSPLaunchCountdown/releases/download/v0.2.1/KSPLaunchCountdown_v0.2.1.zip"
+}
