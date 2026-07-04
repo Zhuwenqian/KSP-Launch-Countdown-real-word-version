@@ -4,8 +4,17 @@
  * 用途：倒计时的核心控制逻辑，协调音频播放和发射序列的执行。
  * 支持单段和多段音频模式、"先启动发动机再分离"功能、
  * 根据发射前安全检查结果的"先点火后放行"策略、
- * 发射前SAS开启的多次尝试和异常处理，
- * 以及 Realism Overhaul（RO）环境下的自动点火延迟适配。
+ * 发射前SAS开启的多次尝试和异常处理、
+ * Realism Overhaul（RO）环境下的自动点火延迟适配，
+ * 以及通过 CountdownAPI 对外暴露 StartCountdown 接口供其他模组调用。
+ *
+ * 对外接口说明：
+ *   CountdownController.StartCountdown 是本模组内部启动倒计时的核心方法，
+ *   外部模组应通过 CountdownAPI 调用，而不是直接调用本类：
+ *     - CountdownAPI.SelectPreset("预设名称")  // 选择预设
+ *     - CountdownAPI.StartCountdown()          // 使用当前预设启动
+ *     - CountdownAPI.StartCountdown("预设名称") // 选择并启动
+ *   CountdownAPI 会自动执行安全检查并注入正确的 SafetyCheckResult。
  *
  * RO 适配说明：
  *   当 ROAdapter 检测到 Realism Overhaul 安装时，

@@ -32,6 +32,12 @@
  *   6. 倒计时进行中可点击Cancel取消
  *   7. 观看自动执行的发射序列！
  *
+ * 对外 API 同步：
+ *   - 本菜单通过 CountdownAPI 与外部模组保持预设选择状态同步
+ *   - 用户在 UI 中切换预设时，会同步通知 CountdownAPI
+ *   - 外部模组通过 CountdownAPI.SelectPreset 选择预设时，会调用
+ *     SelectPresetByName 更新本菜单的选中索引
+ *
  * 安全检查UI：
  *   - 主动点击Launch时执行检查并显示结果
  *   - 订阅CountdownController.OnSafetyCheckFailed事件，确保任何路径的检查失败都会显示警告
@@ -43,6 +49,7 @@
  *   - Localization.cs (多语言支持)
  *   - SettingsManager.cs (音量设置持久化)
  *   - LaunchSafetyChecker.cs (发射前安全检查)
+ *   - CountdownAPI.cs (对外接口同步)
  */
 
 using UnityEngine;
@@ -72,6 +79,9 @@ namespace KSPLaunchCountdown
 
         /// <summary>本地化系统引用</summary>
         private Localization localization;
+
+        /// <summary>对外 API 引用，用于 UI 与外部模组同步预设选择</summary>
+        private CountdownAPI countdownAPI;
 
         /// <summary>菜单窗口是否显示</summary>
         private bool isVisible = false;
@@ -128,13 +138,15 @@ namespace KSPLaunchCountdown
         /// <param name="settings">设置管理器</param>
         /// <param name="player">音频播放器</param>
         /// <param name="loc">本地化系统</param>
-        public void Initialize(PresetManager manager, CountdownController controller, SettingsManager settings, AudioPlayer player, Localization loc)
+        /// <param name="api">对外 API（可选），用于同步预设选择状态</param>
+        public void Initialize(PresetManager manager, CountdownController controller, SettingsManager settings, AudioPlayer player, Localization loc, CountdownAPI api = null)
         {
             presetManager = manager;
             countdownController = controller;
             settingsManager = settings;
             audioPlayer = player;
             localization = loc;
+            countdownAPI = api;
 
             RefreshPresetList();
 
@@ -158,6 +170,28 @@ namespace KSPLaunchCountdown
                     selectedPresetIndex = 0;
                 }
             }
+        }
+
+        /// <summary>
+        /// 按名称选中预设
+        /// 由 CountdownAPI 调用，实现外部模组选择预设时同步更新 UI
+        /// </summary>
+        /// <param name="presetName">要选中的预设名称</param>
+        public void SelectPresetByName(string presetName)
+        {
+            if (presetNames == null || presetNames.Length == 0) return;
+
+            for (int i = 0; i < presetNames.Length; i++)
+            {
+                if (presetNames[i] == presetName)
+                {
+                    selectedPresetIndex = i;
+                    Debug.Log($"{LOG_TAG} 菜单同步选中预设: {presetName}");
+                    return;
+                }
+            }
+
+            Debug.LogWarning($"{LOG_TAG} 菜单同步预设失败：列表中找不到 '{presetName}'");
         }
 
         /// <summary>
@@ -231,6 +265,13 @@ namespace KSPLaunchCountdown
                 if (newIndex != selectedPresetIndex)
                 {
                     selectedPresetIndex = newIndex;
+
+                    // 同步通知对外 API，保持 UI 与外部模组状态一致
+                    var preset = presetManager.GetPresetByIndex(selectedPresetIndex);
+                    if (preset != null && countdownAPI != null)
+                    {
+                        countdownAPI.SyncPresetFromMenu(preset);
+                    }
                 }
             }
             else

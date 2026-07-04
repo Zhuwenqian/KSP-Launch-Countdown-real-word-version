@@ -8,9 +8,11 @@
  * 功能流程：
  *   1. 在飞行场景加载时启动（KSPAddon.Startup.Flight）
  *   2. 初始化所有子模块：SettingsManager、Localization、PresetManager、
- *      AudioPlayer、LaunchSequence、CountdownController、CountdownMenu、ToolbarButton
+ *      AudioPlayer、LaunchSequence、CountdownController、CountdownMenu、ToolbarButton、
+ *      CountdownAPI
  *   3. 触发 ROAdapter 检测 Realism Overhaul 是否安装
- *   4. 在场景切换或模组卸载时清理所有资源
+ *   4. 通过 CountdownAPI 将预设选择和倒计时启动能力暴露给其他模组
+ *   5. 在场景切换或模组卸载时清理所有资源
  *
  * 依赖：
  *   - Assembly-CSharp.dll (KSP核心，提供KSPAddon、MonoBehaviour、GameEvents等)
@@ -18,6 +20,7 @@
  *   - SettingsManager.cs (设置管理)
  *   - Localization.cs (多语言支持)
  *   - ROAdapter.cs (RO 环境检测)
+ *   - CountdownAPI.cs (对外接口)
  *
  * KSP加载机制：
  *   KSP通过 [KSPAddon] 特性自动发现和加载模组类，
@@ -62,6 +65,9 @@ namespace KSPLaunchCountdown
 
         /// <summary>设置管理器，负责全局设置（音量等）的加载和保存</summary>
         private SettingsManager settingsManager;
+
+        /// <summary>对外 API，供其他模组选择预设和启动倒计时</summary>
+        private CountdownAPI countdownAPI;
 
         /// <summary>
         /// Unity生命周期方法，在对象首次创建时调用（仅一次）
@@ -108,9 +114,17 @@ namespace KSPLaunchCountdown
             countdownController = gameObject.AddComponent<CountdownController>();
             countdownController.Initialize(audioPlayer, launchSequence, localization, settingsManager);
 
+            // 初始化对外 API（挂载到同一GameObject）
+            // 在菜单初始化之前创建，菜单初始化后再通过 SetCountdownMenu 注入菜单引用
+            countdownAPI = gameObject.AddComponent<CountdownAPI>();
+            countdownAPI.Initialize(presetManager, countdownController, localization);
+
             // 初始化倒计时菜单UI（需要OnGUI，挂载到同一GameObject）
             countdownMenu = gameObject.AddComponent<CountdownMenu>();
-            countdownMenu.Initialize(presetManager, countdownController, settingsManager, audioPlayer, localization);
+            countdownMenu.Initialize(presetManager, countdownController, settingsManager, audioPlayer, localization, countdownAPI);
+
+            // 将菜单引用注入 API，实现双向同步
+            countdownAPI.SetCountdownMenu(countdownMenu);
 
             // 初始化工具栏按钮（需要ApplicationLauncher，挂载到同一GameObject）
             toolbarButton = gameObject.AddComponent<ToolbarButton>();
