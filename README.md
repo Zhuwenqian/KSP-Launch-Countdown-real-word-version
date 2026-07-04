@@ -204,6 +204,22 @@ KSP Launch Countdown/
    - Find the mod icon on the right side of the toolbar.
    - Click the icon to open the countdown control menu.
 
+### Method 3: Install via CKAN (Recommended for CKAN users)
+
+1. **Open CKAN**
+   - Launch the CKAN mod manager.
+
+2. **Search for the mod**
+   - Enter `KSP Launch Countdown` in the filter box.
+
+3. **Install**
+   - Check the checkbox and click **Apply Changes**.
+   - CKAN will automatically download and install the mod into `GameData/KSPLaunchCountdown/`.
+
+4. **Launch KSP**
+   - Start KSP and enter a flight scene.
+   - The toolbar icon should appear after a few frames.
+
 ### Method 2: Build from Source
 
 #### Prerequisites
@@ -651,6 +667,22 @@ KSP Launch Countdown/
    - 启动KSP，进入飞行场景
    - 在工具栏右侧找到模组图标（自定义图标）
    - 点击图标打开倒计时控制菜单
+
+### 方法三：通过 CKAN 安装（推荐 CKAN 用户）
+
+1. **打开 CKAN**
+   - 启动 CKAN 模组管理器。
+
+2. **搜索模组**
+   - 在搜索框中输入 `KSP Launch Countdown`。
+
+3. **安装**
+   - 勾选模组，点击 **Apply Changes（应用更改）**。
+   - CKAN 会自动下载并将模组安装到 `GameData/KSPLaunchCountdown/`。
+
+4. **启动 KSP**
+   - 启动 KSP 并进入飞行场景。
+   - 工具栏图标会在几帧后出现。
 
 ### 方法二：从源码编译
 

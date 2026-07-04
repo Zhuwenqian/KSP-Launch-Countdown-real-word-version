@@ -40,8 +40,9 @@
 
 1. Download and extract the mod package
 2. Copy `GameData/KSPLaunchCountdown/` folder to your KSP `GameData/` directory
-3. Launch KSP and enter a flight scene
-4. Click the toolbar icon or press `Ctrl+L` to open the countdown menu
+3. Or install via **CKAN** by searching for `KSP Launch Countdown`
+4. Launch KSP and enter a flight scene
+5. Click the toolbar icon or press `Ctrl+L` to open the countdown menu
 
 ### Requirements
 
@@ -101,8 +102,9 @@ GPL v3
 
 1. 下载并解压模组包
 2. 将 `GameData/KSPLaunchCountdown/` 文件夹复制到 KSP 的 `GameData/` 目录
-3. 启动 KSP 并进入飞行场景
-4. 点击工具栏图标或按 `Ctrl+L` 打开倒计时菜单
+3. 或者通过 **CKAN** 搜索 `KSP Launch Countdown` 进行安装
+4. 启动 KSP 并进入飞行场景
+5. 点击工具栏图标或按 `Ctrl+L` 打开倒计时菜单
 
 ### 系统要求
 
