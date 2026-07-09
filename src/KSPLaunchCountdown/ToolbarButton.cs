@@ -10,6 +10,8 @@
  *   - 点击按钮时切换倒计时菜单的显示/隐藏
  *   - 场景切换或模组卸载时自动清理按钮
  *   - Ctrl+L 快捷键兜底切换菜单
+ *   - Update 中通过 HighLogic.LoadedSceneIsFlight 进行二次场景检查，
+ *     非飞行场景下会清理残留的按钮，防止在太空中心、VAB/SPH 等场景错误显示
  *
  * 实现方式（参考 ShipEngineOptimization 示例）：
  *   直接调用 KSP.UI.Screens 命名空间下的真实 ApplicationLauncher API，
@@ -82,6 +84,15 @@ namespace KSPLaunchCountdown
         /// </summary>
         void Update()
         {
+            // 兜底防护：如果当前不是飞行场景但按钮仍被注册，立即清理
+            // 防止场景切换后按钮残留
+            if (launcherButton != null && !HighLogic.LoadedSceneIsFlight)
+            {
+                Debug.LogWarning($"{LOG_TAG} 检测到非飞行场景，清理残留的工具栏按钮");
+                Cleanup();
+                return;
+            }
+
             // 仅在飞行场景且按钮未注册时尝试注册
             if (launcherButton == null && HighLogic.LoadedSceneIsFlight)
             {

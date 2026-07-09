@@ -7,12 +7,14 @@
  *
  * 功能流程：
  *   1. 在飞行场景加载时启动（KSPAddon.Startup.Flight）
- *   2. 初始化所有子模块：SettingsManager、Localization、PresetManager、
+ *   2. Start() 中通过 HighLogic.LoadedSceneIsFlight 进行二次确认，
+ *      若因 KSP 加载机制边界情况在非飞行场景被实例化，则立即销毁自身
+ *   3. 初始化所有子模块：SettingsManager、Localization、PresetManager、
  *      AudioPlayer、LaunchSequence、CountdownController、CountdownMenu、ToolbarButton、
  *      CountdownAPI
- *   3. 触发 ROAdapter 检测 Realism Overhaul 是否安装
- *   4. 通过 CountdownAPI 将预设选择和倒计时启动能力暴露给其他模组
- *   5. 在场景切换或模组卸载时清理所有资源
+ *   4. 触发 ROAdapter 检测 Realism Overhaul 是否安装
+ *   5. 通过 CountdownAPI 将预设选择和倒计时启动能力暴露给其他模组
+ *   6. 在场景切换或模组卸载时清理所有资源
  *
  * 依赖：
  *   - Assembly-CSharp.dll (KSP核心，提供KSPAddon、MonoBehaviour、GameEvents等)
@@ -84,6 +86,16 @@ namespace KSPLaunchCountdown
         /// </summary>
         void Start()
         {
+            // 兜底防护：KSPAddon 标注为 Flight，但如果因 KSP 加载机制边界情况
+            // 在太空中心、VAB/SPH 等非飞行场景被实例化，则立即销毁自身，
+            // 避免在这些场景初始化音频、发射序列、工具栏按钮等资源。
+            if (!HighLogic.LoadedSceneIsFlight)
+            {
+                Debug.LogWarning("[KSPLaunchCountdown] 当前不是飞行场景，模组不初始化并销毁");
+                Destroy(gameObject);
+                return;
+            }
+
             Debug.Log("[KSPLaunchCountdown] 模组已启动 - 初始化子模块");
 
             // 初始化设置管理器（纯逻辑类，从存档配置加载设置）
