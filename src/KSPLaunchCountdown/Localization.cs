@@ -78,6 +78,7 @@ namespace KSPLaunchCountdown
         {
             public const string WindowTitle = "#KSPLaunchCountdown_WindowTitle";
             public const string SelectPreset = "#KSPLaunchCountdown_SelectPreset";
+            public const string SearchPreset = "#KSPLaunchCountdown_SearchPreset";
             public const string NoPresetsFound = "#KSPLaunchCountdown_NoPresetsFound";
             public const string StartEngineBeforeSeparation = "#KSPLaunchCountdown_StartEngineBeforeSeparation";
             public const string LaunchButton = "#KSPLaunchCountdown_LaunchButton";

@@ -9,7 +9,12 @@
  *   ┌──────────────────────────────┐
  *   │      发射倒计时控制            │
  *   ├──────────────────────────────┤
- *   │ 预设: [DFH-1           ▼]   │
+ *   │ 预设: 搜索[            ] ×   │
+ *   │ ┌──────────────────────────┐ │
+ *   │ │ DFH-1                  │ │
+ *   │ │ LM-1(70s Jiuquan)      │ │
+ *   │ │ ...（滚动查看）          │ │
+ *   │ └──────────────────────────┘ │
  *   │ ☑ 先启动发动机再分离          │
  *   │ 音量: [──────●────] 50%      │
  *   │ RO 模式已启用                │
@@ -52,6 +57,7 @@
  *   - CountdownAPI.cs (对外接口同步)
  */
 
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace KSPLaunchCountdown
@@ -93,8 +99,20 @@ namespace KSPLaunchCountdown
         /// <summary>当前选中的预设索引</summary>
         private int selectedPresetIndex = 0;
 
-        /// <summary>预设名称数组，用于下拉列表显示</summary>
+        /// <summary>预设名称数组，用于列表显示</summary>
         private string[] presetNames = new string[0];
+
+        /// <summary>预设列表滚动位置</summary>
+        private Vector2 presetScrollPosition;
+
+        /// <summary>预设搜索关键字</summary>
+        private string presetSearchText = "";
+
+        /// <summary>搜索过滤后的预设索引（对应 presetNames 的真实下标）</summary>
+        private readonly List<int> filteredPresetIndices = new List<int>();
+
+        /// <summary>搜索过滤后的预设名称数组，用于显示</summary>
+        private string[] filteredPresetNames = new string[0];
 
         /// <summary>窗口唯一ID</summary>
         private readonly int windowId = "KSPLaunchCountdownMenu".GetHashCode();
@@ -169,7 +187,59 @@ namespace KSPLaunchCountdown
                 {
                     selectedPresetIndex = 0;
                 }
+                RebuildFilteredPresets();
             }
+        }
+
+        /// <summary>
+        /// 根据搜索关键字重建过滤后的预设列表
+        /// 无关键字时显示全部预设
+        /// </summary>
+        private void RebuildFilteredPresets()
+        {
+            filteredPresetIndices.Clear();
+
+            string query = presetSearchText == null ? "" : presetSearchText.Trim();
+            if (string.IsNullOrEmpty(query))
+            {
+                for (int i = 0; i < presetNames.Length; i++)
+                {
+                    filteredPresetIndices.Add(i);
+                }
+            }
+            else
+            {
+                // 大小写不敏感的子串匹配
+                for (int i = 0; i < presetNames.Length; i++)
+                {
+                    if (presetNames[i].IndexOf(query, System.StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        filteredPresetIndices.Add(i);
+                    }
+                }
+            }
+
+            filteredPresetNames = new string[filteredPresetIndices.Count];
+            for (int i = 0; i < filteredPresetIndices.Count; i++)
+            {
+                filteredPresetNames[i] = presetNames[filteredPresetIndices[i]];
+            }
+        }
+
+        /// <summary>
+        /// 获取当前选中的预设索引在过滤后列表中的位置
+        /// 若当前选中项不在过滤结果中，返回 -1（不选中任何项）
+        /// </summary>
+        private int GetFilteredIndexForSelection()
+        {
+            for (int i = 0; i < filteredPresetIndices.Count; i++)
+            {
+                if (filteredPresetIndices[i] == selectedPresetIndex)
+                {
+                    return i;
+                }
+            }
+            return -1;
         }
 
         /// <summary>
@@ -255,24 +325,42 @@ namespace KSPLaunchCountdown
             GUILayout.Label(localization.GetString(Localization.Keys.SelectPreset));
             if (presetNames.Length > 0)
             {
-                int newIndex = GUILayout.SelectionGrid(
-                    selectedPresetIndex,
-                    presetNames,
-                    1
-                );
+                // 搜索框
+                DrawPresetSearchBox();
 
-                // 预设切换时只更新索引，startEngineBeforeSeparation由用户手动控制
-                if (newIndex != selectedPresetIndex)
+                // 可滚动的预设列表（固定高度，超出后滚动查看）
+                presetScrollPosition = GUILayout.BeginScrollView(presetScrollPosition, GUILayout.Height(150f));
+
+                if (filteredPresetNames.Length > 0)
                 {
-                    selectedPresetIndex = newIndex;
+                    int selectedFilteredIndex = GetFilteredIndexForSelection();
+                    int newFilteredIndex = GUILayout.SelectionGrid(
+                        selectedFilteredIndex,
+                        filteredPresetNames,
+                        1
+                    );
 
-                    // 同步通知对外 API，保持 UI 与外部模组状态一致
-                    var preset = presetManager.GetPresetByIndex(selectedPresetIndex);
-                    if (preset != null && countdownAPI != null)
+                    // 预设切换时只更新索引，startEngineBeforeSeparation由用户手动控制
+                    if (newFilteredIndex != selectedFilteredIndex &&
+                        newFilteredIndex >= 0 && newFilteredIndex < filteredPresetIndices.Count)
                     {
-                        countdownAPI.SyncPresetFromMenu(preset);
+                        // 将过滤后的下标映射回真实的预设下标
+                        selectedPresetIndex = filteredPresetIndices[newFilteredIndex];
+
+                        // 同步通知对外 API，保持 UI 与外部模组状态一致
+                        var preset = presetManager.GetPresetByIndex(selectedPresetIndex);
+                        if (preset != null && countdownAPI != null)
+                        {
+                            countdownAPI.SyncPresetFromMenu(preset);
+                        }
                     }
                 }
+                else
+                {
+                    GUILayout.Label(localization.GetString(Localization.Keys.NoPresetsFound));
+                }
+
+                GUILayout.EndScrollView();
             }
             else
             {
@@ -333,6 +421,38 @@ namespace KSPLaunchCountdown
             GUILayout.EndVertical();
 
             GUI.DragWindow();
+        }
+
+        /// <summary>
+        /// 绘制预设搜索框
+        /// 输入关键字实时过滤预设列表，并提供一键清空按钮
+        /// </summary>
+        private void DrawPresetSearchBox()
+        {
+            GUILayout.BeginHorizontal();
+
+            GUILayout.Label(localization.GetString(Localization.Keys.SearchPreset), GUILayout.Width(60f));
+
+            string newSearchText = GUILayout.TextField(presetSearchText, GUILayout.ExpandWidth(true));
+            if (newSearchText != presetSearchText)
+            {
+                presetSearchText = newSearchText;
+                RebuildFilteredPresets();
+            }
+
+            // 清空按钮（非 emoji，使用文本符号 ×）
+            if (GUILayout.Button("×", GUILayout.Width(20f)))
+            {
+                if (!string.IsNullOrEmpty(presetSearchText))
+                {
+                    presetSearchText = "";
+                    RebuildFilteredPresets();
+                    // 移除输入框焦点，避免继续捕获键盘输入
+                    GUIUtility.keyboardControl = 0;
+                }
+            }
+
+            GUILayout.EndHorizontal();
         }
 
         /// <summary>
